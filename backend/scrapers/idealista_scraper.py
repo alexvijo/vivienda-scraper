@@ -1,13 +1,17 @@
 """
-Idealista scraper using cloudscraper + BeautifulSoup.
+Idealista scraper.
 
-NOTE: This scraper works without an API key by parsing Idealista's HTML.
-When the official API key is available, switch to idealista_api_client.py instead.
+Uses undetected-chromedriver (real Chrome) as fallback when the official API key
+is not configured. Idealista deploys DataDome captcha which blocks all plain HTTP
+clients and headless Playwright, but undetected-chromedriver bypasses it.
 
-Usage of the official API (once key is obtained):
+Priority:
+  1. IDEALISTA_API_KEY + IDEALISTA_API_SECRET set → use official REST API (not yet impl.)
+  2. Neither set → web scraping via undetected-chromedriver
+
+To enable the official API:
     - Sign up at https://developers.idealista.com/
-    - Set env vars: IDEALISTA_API_KEY and IDEALISTA_API_SECRET
-    - Import IdealstaApiClient from idealista_api_client.py and use it in search_service.py
+    - Set IDEALISTA_API_KEY and IDEALISTA_API_SECRET in backend/.env
 """
 
 from __future__ import annotations
@@ -17,9 +21,8 @@ import logging
 import re
 import time
 import unicodedata
-from urllib.parse import urlencode
+import subprocess
 
-import cloudscraper
 from bs4 import BeautifulSoup
 
 from config.settings import get_settings
@@ -30,11 +33,28 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize(text: str) -> str:
-    """Lowercase + strip accents so 'Almería' matches 'almeria', 'Toyo' matches 'toyo'."""
     return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
 
-# Idealista city slugs — must match the URL segment used in /venta-viviendas/<slug>/
-# For municipalities the suffix is "-municipio" (e.g. almeria-municipio).
+
+def _chrome_major_version() -> int | None:
+    """Detect the major version of the system Chrome installation."""
+    paths = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+    for path in paths:
+        try:
+            out = subprocess.check_output(
+                ["powershell", "-command", f"(Get-Item '{path}').VersionInfo.ProductMajorPart"],
+                timeout=5,
+            )
+            return int(out.strip())
+        except Exception:
+            continue
+    return None
+
+
+# Idealista URL slug per city
 CITY_SLUGS: dict[str, str] = {
     "madrid": "madrid",
     "barcelona": "barcelona",
@@ -45,10 +65,12 @@ CITY_SLUGS: dict[str, str] = {
     "malaga": "malaga",
     "alicante": "alicante",
     "murcia": "murcia",
-    "almeria": "almeria-municipio",
-    "almería": "almeria-municipio",
+    "almeria": "almeria-almeria",
+    "almería": "almeria-almeria",
     "granada": "granada",
     "cordoba": "cordoba",
+    "cadiz": "cadiz-cadiz",
+    "cádiz": "cadiz-cadiz",
     "valladolid": "valladolid",
     "vigo": "vigo",
     "gijon": "gijon",
@@ -58,13 +80,7 @@ CITY_SLUGS: dict[str, str] = {
     "salamanca": "salamanca",
 }
 
-# When a district keyword matches one of these entries we swap the city slug for the
-# neighbourhood slug so Idealista returns pre-filtered results (more reliable than
-# post-scraping text search on city-level pages).
-# Key: normalized district term  →  Value: Idealista neighbourhood path segment
-# Pattern: /venta-viviendas/<city-province>/<neighbourhood-slug>/
 DISTRICT_SLUGS: dict[str, str] = {
-    # Almería neighbourhoods / zones
     "retamar": "almeria/retamar-aguadulce",
     "toyo": "almeria/el-toyo-cabo-de-gata",
     "aguadulce": "almeria/retamar-aguadulce",
@@ -80,159 +96,221 @@ class IdealistaScraper(BaseScraper):
 
     def __init__(self) -> None:
         self._settings = get_settings()
-        self._scraper = cloudscraper.create_scraper(
-            browser={"browser": "chrome", "platform": "windows", "mobile": False}
-        )
+
+    def is_available(self) -> bool:
+        # Available via API key OR via web scraping (Chrome must be installed)
+        if self._settings.IDEALISTA_API_KEY and self._settings.IDEALISTA_API_SECRET:
+            return True
+        return _chrome_major_version() is not None
 
     def search(self, filters: SearchFilters) -> list[Property]:
-        properties: list[Property] = []
-        city_slug = CITY_SLUGS.get(filters.city.lower(), filters.city.lower())
+        if self._settings.IDEALISTA_API_KEY and self._settings.IDEALISTA_API_SECRET:
+            # TODO: implement official API client
+            return []
+        return self._search_web(filters)
 
-        # If the district keyword matches a known Idealista neighbourhood slug, use it
-        # directly so results come pre-filtered and we skip text-search post-processing.
-        district_slug = None
-        if filters.district:
-            district_slug = DISTRICT_SLUGS.get(_normalize(filters.district.strip()))
+    def _search_web(self, filters: SearchFilters) -> list[Property]:
+        try:
+            import undetected_chromedriver as uc
+        except ImportError:
+            logger.error("undetected-chromedriver not installed. Run: pip install undetected-chromedriver setuptools")
+            return []
 
+        city_slug = CITY_SLUGS.get(_normalize(filters.city), f"{_normalize(filters.city)}-{_normalize(filters.city)}")
+        district_slug = DISTRICT_SLUGS.get(_normalize(filters.district or "").strip())
         search_slug = district_slug if district_slug else city_slug
 
-        for page in range(1, self._settings.MAX_PAGES + 1):
-            url = self._build_url(search_slug, filters, page)
-            try:
-                html = self._fetch(url)
-            except Exception as exc:
-                logger.warning("Idealista fetch error page %d: %s", page, exc)
-                break
+        chrome_version = _chrome_major_version()
+        options = uc.ChromeOptions()
+        options.add_argument("--lang=es-ES")
+        options.add_argument("--window-size=1366,768")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
-            page_props = self._parse(html, filters.city)
-            if not page_props:
-                break
+        properties: list[Property] = []
+        driver = None
+        try:
+            kwargs = {"options": options, "headless": False, "use_subprocess": True}
+            if chrome_version:
+                kwargs["version_main"] = chrome_version
+            driver = uc.Chrome(**kwargs)
 
-            properties.extend(page_props)
-            time.sleep(1.5)  # polite delay
+            # Warm up on home page so Idealista session cookies are set
+            driver.get(BASE_URL)
+            time.sleep(4)
+            self._dismiss_cookies(driver)
 
-        # Post-scraping text filter only when no direct neighbourhood slug was used
+            for page in range(1, self._settings.MAX_PAGES + 1):
+                url = self._build_url(search_slug, filters, page)
+                logger.debug("Idealista fetching: %s", url)
+                driver.get(url)
+                time.sleep(7)
+                self._dismiss_cookies(driver)
+
+                html = driver.page_source
+                # If DataDome slider appeared, stop — avoid triggering more challenges
+                if "desliza" in html.lower() or "captcha-delivery" in html.lower():
+                    logger.warning("Idealista: DataDome slider detected, stopping")
+                    break
+
+                page_props = self._parse(html, filters.city)
+                if not page_props:
+                    break
+                properties.extend(page_props)
+                # Longer polite delay between pages to avoid rate-limiting
+                time.sleep(4)
+
+        except Exception as exc:
+            logger.error("Idealista web scraper error: %s", exc)
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+
+        # Post-filter by district if no direct slug was used
         if filters.district and not district_slug:
-            search_term = _normalize(filters.district)
+            term = _normalize(filters.district)
             properties = [
                 p for p in properties
-                if search_term in _normalize(
-                    " ".join([p.title or "", p.address or "", p.description or "", p.url or ""])
-                )
+                if term in _normalize(" ".join([p.title or "", p.address or "", p.url or ""]))
             ]
 
         return properties
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
+    def _dismiss_cookies(self, driver) -> None:
+        """Click 'Rechazar' or 'Aceptar y continuar' on the Idealista cookie modal if present."""
+        try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+
+            # Try "Rechazar" first (less tracking), fall back to "Aceptar y continuar"
+            for text in ("Rechazar", "Aceptar y continuar"):
+                try:
+                    btn = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, f"//button[normalize-space()='{text}']")
+                        )
+                    )
+                    btn.click()
+                    time.sleep(1)
+                    return
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.debug("Cookie dismiss skipped: %s", exc)
 
     def _build_url(self, slug: str, filters: SearchFilters, page: int) -> str:
-        # Idealista URL structure:
-        #   Page 1:  /venta-viviendas/<slug>/
-        #   Page N:  /venta-viviendas/<slug>/pagina-N.htm
-        if page > 1:
-            path = f"/venta-viviendas/{slug}/pagina-{page}.htm"
-        else:
-            path = f"/venta-viviendas/{slug}/"
+        parts = [f"/venta-viviendas/{slug}"]
 
-        params: dict[str, str] = {}
+        # Encode filters as clean URL path segments (Idealista style)
+        segments: list[str] = []
         if filters.price_max is not None:
-            params["preciomax"] = str(int(filters.price_max))
+            segments.append(f"con-precio-hasta_{int(filters.price_max)}")
         if filters.price_min is not None:
-            params["preciomin"] = str(int(filters.price_min))
+            segments.append(f"con-precio-de_{int(filters.price_min)}")
         if filters.rooms_min is not None:
-            params["habitaciones"] = str(filters.rooms_min)
+            segments.append(f"con-{filters.rooms_min}-habitaciones-o-mas")
         if filters.size_min is not None:
-            params["superficiemin"] = str(int(filters.size_min))
-        if filters.size_max is not None:
-            params["superficiemax"] = str(int(filters.size_max))
+            segments.append(f"con-metros-cuadrados-mas-de_{int(filters.size_min)}")
 
-        qs = ("?" + urlencode(params)) if params else ""
-        return BASE_URL + path + qs
+        if segments:
+            parts.append(",".join(segments))
 
-    def _fetch(self, url: str) -> str:
-        resp = self._scraper.get(url, timeout=self._settings.REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        return resp.text
+        path = "/".join(parts) + "/"
+
+        if page > 1:
+            # Idealista pagination: append pagina-N.htm before trailing slash
+            path = path.rstrip("/") + f"/pagina-{page}.htm"
+
+        return BASE_URL + path
 
     def _parse(self, html: str, city: str) -> list[Property]:
         soup = BeautifulSoup(html, "lxml")
-        items = soup.select("article.item")
+        articles = soup.select("article.item")
         properties: list[Property] = []
-
-        for item in items:
+        for art in articles:
             try:
-                prop = self._parse_item(item, city)
+                prop = self._parse_item(art, city)
                 if prop:
                     properties.append(prop)
             except Exception as exc:
                 logger.debug("Error parsing item: %s", exc)
-
         return properties
 
-    def _parse_item(self, item: BeautifulSoup, city: str) -> Property | None:
-        # Title & URL
-        title_tag = item.select_one("a.item-link")
-        if not title_tag:
+    def _parse_item(self, art: BeautifulSoup, city: str) -> Property | None:
+        link = art.select_one("a.item-link")
+        if not link:
             return None
-        title = title_tag.get_text(strip=True)
-        relative_url = title_tag.get("href", "")
-        url = BASE_URL + relative_url if relative_url.startswith("/") else relative_url
 
-        # Generate stable ID from URL
+        title = link.get_text(strip=True)
+        relative_url = link.get("href", "")
+        url = BASE_URL + relative_url if relative_url.startswith("/") else relative_url
         prop_id = hashlib.md5(url.encode()).hexdigest()[:12]
 
-        # Price
-        price = None
-        price_tag = item.select_one(".item-price")
+        price: float | None = None
+        price_tag = art.select_one(".item-price")
         if price_tag:
-            price_text = price_tag.get_text(strip=True)
-            price = self._parse_number(price_text)
+            price = self._parse_number(price_tag.get_text(strip=True))
 
-        # Details (rooms, size)
         rooms: int | None = None
         size_m2: float | None = None
-        detail_items = item.select(".item-detail")
-        for detail in detail_items:
+        for detail in art.select(".item-detail"):
             text = detail.get_text(strip=True).lower()
             if "hab" in text:
                 rooms = int(self._parse_number(text) or 0) or None
-            elif "m²" in text or "m2" in text:
+            elif "m²" in text or "m2" in text or "m�" in text:
                 size_m2 = self._parse_number(text)
 
-        # Image
         images: list[str] = []
-        img = item.select_one("img.item-multimedia")
+        img = art.select_one("img.item-multimedia-image") or art.select_one("picture img")
         if img:
             src = img.get("src") or img.get("data-src")
-            if src:
+            if src and src.startswith("http"):
                 images.append(src)
 
-        # Address / district
-        address_tag = item.select_one(".item-detail-char .ellipsis") or item.select_one(
-            "[class*='item-address']"
-        )
+        address_tag = art.select_one(".item-detail-char .ellipsis")
         address = address_tag.get_text(strip=True) if address_tag else None
 
         return Property(
             id=prop_id,
             title=title,
             price=price,
+            price_per_m2=price / size_m2 if price and size_m2 else None,
             size_m2=size_m2,
             rooms=rooms,
+            bathrooms=None,
+            floor=None,
             address=address,
+            district=None,
             city=city,
+            lat=None,
+            lon=None,
             url=url,
             platform=self.platform,
             images=images,
+            description=None,
+            has_elevator=None,
+            has_parking=None,
+            has_terrace=None,
+            is_new_development=None,
+            published_at=None,
+            scraped_at=self.now_iso(),
         )
 
     @staticmethod
     def _parse_number(text: str) -> float | None:
-        cleaned = re.sub(r"[^\d,.]", "", text).replace(",", ".")
-        # Remove trailing dots
-        cleaned = cleaned.strip(".")
+        # Idealista uses "." as thousands separator and "," as decimal (es-ES)
+        # e.g. "174.900€" → 174900,  "1.200,50€" → 1200.50
+        digits_only = re.sub(r"[^\d.,]", "", text)
+        if "," in digits_only:
+            # Remove thousands dots, replace decimal comma
+            cleaned = digits_only.replace(".", "").replace(",", ".")
+        else:
+            # Only dots present → thousands separators, no decimal
+            cleaned = digits_only.replace(".", "")
         try:
             return float(cleaned)
         except ValueError:

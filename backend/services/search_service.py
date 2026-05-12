@@ -97,7 +97,7 @@ class SearchService:
             {
                 "key": platform,
                 "name": platform.capitalize(),
-                "available": True,
+                "available": AVAILABLE_SCRAPERS[platform]().is_available(),
             }
             for platform in AVAILABLE_SCRAPERS
         ]

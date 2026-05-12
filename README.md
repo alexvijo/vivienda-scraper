@@ -113,9 +113,9 @@ ng serve
 
 ## 🔑 API Keys Opcionales
 
-### Idealista (Actualmente bloqueado)
+### Idealista (requiere API key — DataDome bloquea scraping directo)
 
-Idealista.com requiere API key para evitar bloqueos anti-bot. Para habilitarlo:
+Idealista usa DataDome como sistema anti-bot, que no puede bypasearse con scrapers HTTP ni Playwright. La única vía es la API oficial. Para habilitarlo:
 
 1. **Registrate en Idealista API**: [https://api.idealista.com/commercials](https://api.idealista.com/commercials)
 
@@ -329,7 +329,7 @@ DEBUG:    Found 5 properties from pisos
 | **Habitaclia** | ✅ Funcional | Cobertura media |
 | **YaEncontre** | ✅ Funcional | Cobertura media |
 | **Trovimap** | ✅ Funcional | Cobertura media |
-| **Idealista** | ❌ Bloqueado | Requiere API key oficial |
+| **Idealista** | ❌ Bloqueado | DataDome captcha — requiere API key oficial |
 
 **Coordinadas GPS:** La mayoría de scrapers no extraen `lat/lon`. El mapa usa Nominatim para centrar en la ciudad buscada.
 
