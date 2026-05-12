@@ -56,9 +56,10 @@ class PisosScraper(BaseScraper):
     def search(self, filters: SearchFilters) -> list[Property]:
         properties: list[Property] = []
         city_slug = CITY_SLUGS.get(filters.city.lower(), filters.city.lower())
+        district_slug = filters.district.lower().replace(" ", "-") if filters.district else None
 
         for page in range(1, self._settings.MAX_PAGES + 1):
-            url = self._build_url(city_slug, page)
+            url = self._build_url(city_slug, district_slug, page)
             try:
                 html = self._fetch(url)
             except Exception as exc:
@@ -80,10 +81,13 @@ class PisosScraper(BaseScraper):
 
     # ------------------------------------------------------------------
 
-    def _build_url(self, city_slug: str, page: int) -> str:
+    def _build_url(self, city_slug: str, district_slug: str | None, page: int) -> str:
+        # Build location string: "distrito-ciudad" or just "ciudad"
+        location = f"{district_slug}-{city_slug}" if district_slug else city_slug
+
         if page == 1:
-            return f"{BASE_URL}/venta/pisos-{city_slug}/"
-        return f"{BASE_URL}/venta/pisos-{city_slug}/{page}/"
+            return f"{BASE_URL}/venta/pisos-{location}/"
+        return f"{BASE_URL}/venta/pisos-{location}/{page}/"
 
     def _fetch(self, url: str) -> str:
         resp = self._scraper.get(url, timeout=self._settings.REQUEST_TIMEOUT)

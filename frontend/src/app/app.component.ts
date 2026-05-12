@@ -35,6 +35,7 @@ export class AppComponent implements OnInit {
 
   readonly searchForm = this.fb.group({
     city: ['madrid', [Validators.required, Validators.minLength(2)]],
+    district: [null as string | null],
     price_min: [null as number | null],
     price_max: [null as number | null],
     rooms_min: [null as number | null],
@@ -174,6 +175,7 @@ export class AppComponent implements OnInit {
 
     return {
       city: raw.city ?? '',
+      district: raw.district ?? undefined,
       price_min: raw.price_min,
       price_max: raw.price_max,
       rooms_min: raw.rooms_min,

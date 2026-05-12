@@ -47,6 +47,7 @@ class Property(BaseModel):
 
 class SearchFilters(BaseModel):
     city: str
+    district: Optional[str] = None  # Barrio o zona específica
     price_min: Optional[float] = None
     price_max: Optional[float] = None
     rooms_min: Optional[int] = None

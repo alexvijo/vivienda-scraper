@@ -47,12 +47,15 @@ class TrovimapScraper(BaseScraper):
     def search(self, filters: SearchFilters) -> list[Property]:
         city = filters.city.lower()
         slug = self.city_slugs.get(city, city)
+        district_slug = filters.district.lower().replace(" ", "-") if filters.district else None
 
         properties = []
         pages = 0
 
         while pages < 3:
-            url = f"{self.base_url}/buscar/vivienda/{slug}"
+            # Build URL with district if provided
+            location = f"{district_slug}/{slug}" if district_slug else slug
+            url = f"{self.base_url}/buscar/vivienda/{location}"
             if pages > 0:
                 url += f"?page={pages + 1}"
 
