@@ -52,7 +52,17 @@ git clone https://github.com/yourusername/vivienda-scraper.git
 cd vivienda-scraper
 ```
 
-### 2. Configurar Backend (FastAPI)
+### 2. Arranque rápido (ambos servicios a la vez)
+
+Si estás en Windows, puedes arrancar el backend y el frontend en dos ventanas separadas con un solo comando:
+
+```powershell
+.\start.ps1
+```
+
+O continúa con la configuración manual:
+
+### 3. Configurar Backend manualmente (FastAPI)
 
 ```bash
 cd backend
@@ -73,7 +83,7 @@ py -3.13 -m uvicorn main:app --reload --port 8000
 
 ✅ Backend disponible en: `http://localhost:8000`
 
-### 3. Configurar Frontend (Angular)
+### 4. Configurar Frontend manualmente (Angular)
 
 En otra terminal:
 
@@ -90,7 +100,7 @@ ng serve
 
 ✅ Frontend disponible en: `http://localhost:4200`
 
-### 4. Usar la aplicación
+### 5. Usar la aplicación
 
 1. Abre `http://localhost:4200` en tu navegador
 2. Selecciona una ciudad (ej: "Madrid", "Barcelona", "Almería")

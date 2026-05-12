@@ -5,69 +5,78 @@
     </div>
   </header>
 
-  <section class="search-panel">
-    <form [formGroup]="searchForm" (ngSubmit)="submitSearch()" class="search-grid">
-      <label>
-        Ciudad
-        <input type="text" formControlName="city" placeholder="madrid" />
-      </label>
+  <div class="top-layout">
+    <section class="search-panel">
+      <form [formGroup]="searchForm" (ngSubmit)="submitSearch()" class="search-grid">
+        <label>
+          Ciudad
+          <input type="text" formControlName="city" placeholder="madrid" />
+        </label>
 
-      <label>
-        Barrio/Zona (o palabras clave)
-        <input type="text" formControlName="keyword" placeholder="ej: Toyo, Retamar" />
-      </label>
+        <label>
+          Zona (o palabras clave)
+          <input type="text" formControlName="keyword" placeholder="ej: Toyo, Retamar" />
+        </label>
 
-      <label>
-        Precio minimo
-        <input type="number" formControlName="price_min" placeholder="150000" />
-      </label>
+        <label>
+          Precio minimo
+          <input type="number" formControlName="price_min" placeholder="150000" />
+        </label>
 
-      <label>
-        Precio maximo
-        <input type="number" formControlName="price_max" placeholder="400000" />
-      </label>
+        <label>
+          Precio maximo
+          <input type="number" formControlName="price_max" placeholder="400000" />
+        </label>
 
-      <label>
-        Habitaciones minimas
-        <input type="number" formControlName="rooms_min" placeholder="2" />
-      </label>
+        <label>
+          Habitaciones minimas
+          <input type="number" formControlName="rooms_min" placeholder="2" />
+        </label>
 
-      <label>
-        Superficie minima (m2)
-        <input type="number" formControlName="size_min" placeholder="65" />
-      </label>
+        <label>
+          Superficie minima (m2)
+          <input type="number" formControlName="size_min" placeholder="65" />
+        </label>
 
-      <label>
-        Superficie maxima (m2)
-        <input type="number" formControlName="size_max" placeholder="180" />
-      </label>
+        <label>
+          Superficie maxima (m2)
+          <input type="number" formControlName="size_max" placeholder="180" />
+        </label>
 
-      <div class="platforms">
-        <p>Plataformas</p>
-        <div class="chips">
-          @for (platform of platforms; track platform.key) {
-            <label class="chip" [class.disabled]="!platform.available">
-              <input
-                type="checkbox"
-                [checked]="selectedPlatforms.has(platform.key)"
-                [disabled]="!platform.available"
-                (change)="togglePlatform(platform.key, $any($event.target).checked)"
-              />
-              <span>{{ platform.name }}</span>
-            </label>
-          }
+        <div class="platforms">
+          <p>Plataformas</p>
+          <div class="chips">
+            @for (platform of platforms; track platform.key) {
+              <label class="chip" [class.disabled]="!platform.available">
+                <input
+                  type="checkbox"
+                  [checked]="selectedPlatforms.has(platform.key)"
+                  [disabled]="!platform.available"
+                  (change)="togglePlatform(platform.key, $any($event.target).checked)"
+                />
+                <span>{{ platform.name }}</span>
+                @if (countByPlatform(platform.key) > 0) {
+                  <span class="chip-count">{{ countByPlatform(platform.key) }}</span>
+                }
+              </label>
+            }
+          </div>
         </div>
-      </div>
 
-      <button type="submit" [disabled]="loading">
-        {{ loading ? 'Buscando...' : 'Buscar viviendas' }}
-      </button>
-    </form>
+        <button type="submit" [disabled]="loading">
+          {{ loading ? 'Buscando...' : 'Buscar viviendas' }}
+        </button>
+      </form>
 
-    @if (errorMessage) {
-      <p class="error">{{ errorMessage }}</p>
-    }
-  </section>
+      @if (errorMessage) {
+        <p class="error">{{ errorMessage }}</p>
+      }
+    </section>
+
+    <section class="map-wrapper">
+      <div #mapContainer class="map-canvas" aria-label="Mapa de propiedades"></div>
+    </section>
+  </div>
 
   <section class="results-meta">
     <p>
@@ -81,10 +90,6 @@
     </p>
   </section>
 
-  <section class="map-wrapper">
-    <div #mapContainer class="map-canvas" aria-label="Mapa de propiedades"></div>
-  </section>
-
   <section class="results-grid">
     @if (!loading && initialized && properties.length === 0) {
       <article class="empty-state">
@@ -93,7 +98,7 @@
       </article>
     }
 
-    @for (property of properties; track trackByPropertyId($index, property)) {
+    @for (property of pagedProperties; track trackByPropertyId($index, property)) {
       <article class="property-card" [class]="'platform-' + property.platform">
         @if (property.images && property.images.length > 0) {
           <div class="card-image">
@@ -131,4 +136,14 @@
       </article>
     }
   </section>
+
+  @if (totalPages > 1) {
+    <nav class="pagination">
+      <button class="page-btn" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">&#8249;</button>
+      @for (page of pageNumbers; track page) {
+        <button class="page-btn" [class.active]="page === currentPage" (click)="goToPage(page)">{{ page }}</button>
+      }
+      <button class="page-btn" (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages">&#8250;</button>
+    </nav>
+  }
 </div>

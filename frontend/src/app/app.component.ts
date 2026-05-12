@@ -54,6 +54,28 @@ export class AppComponent implements OnInit {
   initialized = false;
   errorMessage = '';
 
+  readonly pageSize = 15;
+  currentPage = 1;
+
+  get totalPages(): number {
+    return Math.ceil(this.properties.length / this.pageSize);
+  }
+
+  get pagedProperties(): Property[] {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.properties.slice(start, start + this.pageSize);
+  }
+
+  get pageNumbers(): number[] {
+    return Array.from({ length: this.totalPages }, (_, i) => i + 1);
+  }
+
+  goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages) return;
+    this.currentPage = page;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   private leaflet?: LeafletModule;
   private map?: LeafletMap;
   private markers: LeafletMarker[] = [];
@@ -155,6 +177,7 @@ export class AppComponent implements OnInit {
             results = results.filter((p) => this.getKeywordSnippet(p));
           }
           this.properties = results;
+          this.currentPage = 1;
           this.platformsQueried = response.platforms_queried;
           // If keyword is provided, geocode "keyword, city", otherwise just "city"
           const searchLocation = filters.keyword
@@ -175,6 +198,10 @@ export class AppComponent implements OnInit {
             'Could not load properties. Make sure backend is running on localhost:8000.';
         },
       });
+  }
+
+  countByPlatform(platformKey: string): number {
+    return this.properties.filter(p => p.platform === platformKey).length;
   }
 
   togglePlatform(platformKey: string, checked: boolean): void {

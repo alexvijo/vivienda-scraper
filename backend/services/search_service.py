@@ -73,6 +73,16 @@ class SearchService:
             except Exception as exc:
                 logger.error("Scraper %s failed: %s", platform, exc)
 
+        # Deduplicate: prefer URL as key, fallback to (title, price, address)
+        seen: set[str] = set()
+        unique: list[Property] = []
+        for prop in properties:
+            key = prop.url or f"{prop.title}|{prop.price}|{prop.address}"
+            if key not in seen:
+                seen.add(key)
+                unique.append(prop)
+        properties = unique
+
         # Sort by price ascending (nulls last)
         properties.sort(key=lambda p: p.price if p.price is not None else float("inf"))
 
