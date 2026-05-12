@@ -1,3 +1,25 @@
+
+// ...existing imports...
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
+  templateUrl: './app.component.html',
+  styleUrl: './app.component.scss',
+})
+export class AppComponent implements OnInit {
+  @ViewChild('mapContainer')
+  private mapContainer?: ElementRef<HTMLDivElement>;
+
+  // ...existing properties...
+
+  constructor(
+    private readonly fb: FormBuilder,
+    private readonly searchApi: SearchApiService,
+    private readonly http: HttpClient,
+  ) {}
+
   /**
    * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
    * buscando en título, dirección, descripción y url. Resalta el término encontrado.
@@ -37,6 +59,8 @@
     }
     return null;
   }
+
+// ...existing code...
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import {
