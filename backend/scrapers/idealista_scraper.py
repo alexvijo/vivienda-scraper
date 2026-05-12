@@ -215,7 +215,15 @@ class IdealistaScraper(BaseScraper):
                 except Exception:
                     pass
 
-        # Post-filter by district if no direct slug was used
+        # Post-filter: price_min, rooms_min, size_min (not supported in Idealista URL)
+        if filters.price_min is not None:
+            properties = [p for p in properties if p.price is None or p.price >= filters.price_min]
+        if filters.rooms_min is not None:
+            properties = [p for p in properties if p.rooms is None or p.rooms >= filters.rooms_min]
+        if filters.size_min is not None:
+            properties = [p for p in properties if p.size_m2 is None or p.size_m2 >= filters.size_min]
+
+        # Post-filter by district keyword if no direct slug was used
         if filters.district and not district_slug:
             term = _normalize(filters.district)
             properties = [
@@ -249,28 +257,13 @@ class IdealistaScraper(BaseScraper):
             logger.debug("Cookie dismiss skipped: %s", exc)
 
     def _build_url(self, slug: str, filters: SearchFilters, page: int) -> str:
-        parts = [f"/venta-viviendas/{slug}"]
-
-        # Encode filters as clean URL path segments (Idealista style)
-        segments: list[str] = []
+        # Idealista only supports price_max in the URL path.
+        # price_min, rooms_min, size_min are applied as post-scraping filters.
+        path = f"/venta-viviendas/{slug}/"
         if filters.price_max is not None:
-            segments.append(f"con-precio-hasta_{int(filters.price_max)}")
-        if filters.price_min is not None:
-            segments.append(f"con-precio-de_{int(filters.price_min)}")
-        if filters.rooms_min is not None:
-            segments.append(f"con-{filters.rooms_min}-habitaciones-o-mas")
-        if filters.size_min is not None:
-            segments.append(f"con-metros-cuadrados-mas-de_{int(filters.size_min)}")
-
-        if segments:
-            parts.append(",".join(segments))
-
-        path = "/".join(parts) + "/"
-
+            path = f"/venta-viviendas/{slug}/con-precio-hasta_{int(filters.price_max)}/"
         if page > 1:
-            # Idealista pagination: append pagina-N.htm before trailing slash
             path = path.rstrip("/") + f"/pagina-{page}.htm"
-
         return BASE_URL + path
 
     def _parse(self, html: str, city: str) -> list[Property]:
