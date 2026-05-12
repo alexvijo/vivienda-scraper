@@ -1,16 +1,26 @@
 """
-Fotocasa scraper using cloudscraper + BeautifulSoup.
-Parses article cards from server-rendered HTML — no API key required.
+Fotocasa scraper.
+
+Fotocasa renders listings client-side, but embeds the first page of results as
+a JSON object inside a <script> tag (the largest inline script on the page).
+The array is at key "realEstates" and contains ~30 items per page.
+
+URL structure:
+  City only:  /es/comprar/viviendas/<city-slug>/todas-las-zonas/l
+  With zone:  /es/comprar/viviendas/<city-slug>/<zone-slug>/l
+  Page 2+:    ...?page=2&sortType=publicationDate
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import time
+import unicodedata
 
 import cloudscraper
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from config.settings import get_settings
 from models.property import Property, SearchFilters
@@ -20,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.fotocasa.es"
 
+# city input -> Fotocasa municipality slug used in /es/comprar/viviendas/<slug>/
 CITY_SLUGS: dict[str, str] = {
     "madrid": "madrid",
     "barcelona": "barcelona",
@@ -30,8 +41,8 @@ CITY_SLUGS: dict[str, str] = {
     "malaga": "malaga",
     "alicante": "alicante",
     "murcia": "murcia",
-    "almeria": "almeria",
-    "almería": "almeria",
+    "almeria": "almeria-capital",
+    "almería": "almeria-capital",
     "granada": "granada",
     "cordoba": "cordoba",
     "valladolid": "valladolid",
@@ -43,191 +54,230 @@ CITY_SLUGS: dict[str, str] = {
     "salamanca": "salamanca",
 }
 
+# normalized district keyword -> Fotocasa zone slug (appended after city slug)
+DISTRICT_SLUGS: dict[str, dict[str, str]] = {
+    "retamar":    {"city": "almeria-capital", "zone": "retamar"},
+    "aguadulce":  {"city": "almeria-capital", "zone": "retamar-aguadulce"},
+    "toyo":       {"city": "almeria-capital", "zone": "el-toyo-cabo-de-gata"},
+    "el toyo":    {"city": "almeria-capital", "zone": "el-toyo-cabo-de-gata"},
+    "cabo de gata": {"city": "almeria-capital", "zone": "el-toyo-cabo-de-gata"},
+}
+
+
+def _normalize(text: str) -> str:
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
+
+def _extract_feature(features: list[dict], key: str) -> int | None:
+    for f in features:
+        if f.get("key") == key:
+            v = f.get("value")
+            return int(v) if v is not None else None
+    return None
+
 
 class FotocasaScraper(BaseScraper):
     platform = "fotocasa"
 
     def __init__(self) -> None:
         self._settings = get_settings()
-        self._scraper = cloudscraper.create_scraper(
+
+    def _new_scraper(self):
+        return cloudscraper.create_scraper(
             browser={"browser": "chrome", "platform": "windows", "mobile": False}
         )
 
     def search(self, filters: SearchFilters) -> list[Property]:
-        properties: list[Property] = []
         city_slug = CITY_SLUGS.get(filters.city.lower(), filters.city.lower())
+        zone_slug = None
+
+        if filters.district:
+            info = DISTRICT_SLUGS.get(_normalize(filters.district.strip()))
+            if info:
+                city_slug = info["city"]
+                zone_slug = info["zone"]
+
+        properties: list[Property] = []
 
         for page in range(1, self._settings.MAX_PAGES + 1):
-            url = self._build_url(city_slug, filters, page)
+            url = self._build_url(city_slug, zone_slug, filters, page)
             try:
-                html = self._fetch(url)
+                scraper = self._new_scraper()
+                resp = scraper.get(url, timeout=self._settings.REQUEST_TIMEOUT)
+                resp.raise_for_status()
+                resp.encoding = "utf-8"
+                html_text = resp.text
             except Exception as exc:
                 logger.warning("Fotocasa fetch error page %d: %s", page, exc)
                 break
 
-            page_props = self._parse(html, filters)
-            if not page_props:
+            listings = self._extract_listings(html_text)
+            if not listings:
                 break
 
-            properties.extend(page_props)
+            for item in listings:
+                try:
+                    prop = self._parse_item(item, filters)
+                    if prop:
+                        properties.append(prop)
+                except Exception as exc:
+                    logger.debug("Fotocasa item parse error: %s", exc)
 
-            if len(page_props) < 20:
+            if len(listings) < 20:
                 break
 
             time.sleep(1.2)
 
         return properties
 
-    # ------------------------------------------------------------------
-
-    def _build_url(self, city_slug: str, filters: SearchFilters, page: int) -> str:
-        # Note: fotocasa does not properly support district filtering
-        # Using "todas-las-zonas" to fetch all zones, filtering is unreliable
-        base = f"{BASE_URL}/es/comprar/viviendas/{city_slug}/todas-las-zonas/l"
-        params: list[str] = []
-        if filters.price_max is not None:
-            params.append(f"maxPrice={int(filters.price_max)}")
+    def _build_url(self, city_slug: str, zone_slug: str | None, filters: SearchFilters, page: int) -> str:
+        zone = zone_slug or "todas-las-zonas"
+        base = f"{BASE_URL}/es/comprar/viviendas/{city_slug}/{zone}/l"
+        params: list[str] = ["sortType=publicationDate"]
         if filters.price_min is not None:
             params.append(f"minPrice={int(filters.price_min)}")
+        if filters.price_max is not None:
+            params.append(f"maxPrice={int(filters.price_max)}")
         if filters.rooms_min is not None:
             params.append(f"minRooms={filters.rooms_min}")
         if page > 1:
             params.append(f"page={page}")
-        qs = ("?" + "&".join(params)) if params else ""
-        return base + qs
+        return base + "?" + "&".join(params)
 
-    def _fetch(self, url: str) -> str:
-        resp = self._scraper.get(url, timeout=self._settings.REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        resp.encoding = "utf-8"
-        return resp.text
-
-    def _parse(self, html: str, filters: SearchFilters) -> list[Property]:
+    def _extract_listings(self, html: str) -> list[dict]:
         soup = BeautifulSoup(html, "lxml")
-        # Articles with a link pointing to a property detail page
-        articles = soup.select("article")
-        properties: list[Property] = []
-
-        for article in articles:
+        for script in soup.find_all("script", src=False):
+            txt = script.get_text()
+            idx = txt.find('"realEstates":[{')
+            if idx == -1:
+                continue
+            arr_start = idx + len('"realEstates":')
+            depth = 0
+            arr_end = arr_start
+            for i, c in enumerate(txt[arr_start:], arr_start):
+                if c == "[":
+                    depth += 1
+                elif c == "]":
+                    depth -= 1
+                    if depth == 0:
+                        arr_end = i + 1
+                        break
             try:
-                prop = self._parse_article(article, filters.city)
-                if prop is None:
-                    continue
-                # Client-side filtering for fields not supported in URL
-                if filters.size_min and prop.size_m2 and prop.size_m2 < filters.size_min:
-                    continue
-                if filters.size_max and prop.size_m2 and prop.size_m2 > filters.size_max:
-                    continue
-                # Filter by district if provided (search in title, address, description)
-                if filters.district:
-                    search_term = filters.district.lower()
-                    searchable_text = " ".join([
-                        prop.title or "",
-                        prop.address or "",
-                        prop.description or "",
-                        prop.url or ""
-                    ]).lower()
-                    if search_term not in searchable_text:
-                        continue
-                properties.append(prop)
+                return json.loads(txt[arr_start:arr_end])
             except Exception as exc:
-                logger.debug("Fotocasa parse error: %s", exc)
+                logger.debug("Fotocasa JSON parse error: %s", exc)
+        return []
 
-        return properties
-
-    def _parse_article(self, article: Tag, city: str) -> Property | None:
-        # Must contain a link to a property detail page
-        link_tag = article.find("a", href=re.compile(r"/es/comprar/"))
-        if not link_tag:
+    def _parse_item(self, item: dict, filters: SearchFilters) -> Property | None:
+        detail_path = item.get("detail", {}).get("es-ES", "")
+        if not detail_path:
             return None
-
-        href = link_tag["href"]
-        # Skip banners / agency links (they don't end with /d or a numeric id)
-        if not re.search(r"(/d$|/\d+$|/\d+/d$)", href):
-            return None
-        url = BASE_URL + href if href.startswith("/") else href
+        url = BASE_URL + detail_path if detail_path.startswith("/") else detail_path
+        # Strip tracking params
+        url = re.sub(r"\?.*$", "", url)
         prop_id = hashlib.md5(url.encode()).hexdigest()[:12]
 
-        # Flatten text for regex extraction
-        text = " | ".join(t.strip() for t in article.stripped_strings if t.strip())
+        # Price: "650.000 €" -> 650000.0
+        price_raw = str(item.get("rawPrice") or item.get("price") or "")
+        price = self._parse_price(price_raw)
 
-        price = self._extract_price(text)
-        if price is None:
-            return None  # skip promotions / non-property cards
+        features = item.get("features", [])
+        rooms = _extract_feature(features, "rooms")
+        bathrooms = _extract_feature(features, "bathrooms")
+        size_m2 = _extract_feature(features, "surface")
+        floor_val = _extract_feature(features, "floor")
+        floor = str(floor_val) if floor_val else None
 
-        rooms = self._extract_int(r"(\d+)\s*hab", text)
-        bathrooms = self._extract_int(r"(\d+)\s*baño", text)
-        size_m2 = self._extract_float(r"(\d+(?:[.,]\d+)?)\s*m²", text)
-        floor_raw = self._extract_str(r"(\d+[aªº]?\s*[Pp]lanta)", text)
+        # Address fields
+        addr = item.get("address", {})
+        district = addr.get("district") or item.get("location")
+        municipality = (addr.get("municipality") or addr.get("city") or "").strip()
+        full_address = ", ".join(filter(None, [item.get("location"), municipality]))
 
-        # Title: look for the link text or a heading
-        heading = article.select_one("h2, h3, [class*=title], [class*=Title]")
-        if heading:
-            title = heading.get_text(strip=True)
-        else:
-            title = link_tag.get_text(strip=True) or url
+        # Coordinates
+        coords = item.get("coordinates") or {}
+        lat = coords.get("latitude") if isinstance(coords, dict) else None
+        lon = coords.get("longitude") if isinstance(coords, dict) else None
 
         # Images
-        images: list[str] = []
-        img_tags = article.select("img[src]")
-        for img in img_tags:
-            src = img.get("src", "")
-            if src.startswith("http") and not src.endswith(".svg"):
-                images.append(src)
-                break  # first image is enough
+        images = [
+            m["src"] for m in item.get("multimedia", [])
+            if m.get("type") == "image" and m.get("src")
+        ][:3]
 
-        # Location from href: /es/comprar/vivienda/{city-slug}/...
-        location_match = re.search(r"/es/comprar/(?:vivienda|obra-nueva|piso|casa)/([^/]+)/", href)
-        district = location_match.group(1).replace("-", " ").title() if location_match else None
+        # Title from location + type
+        building_type = item.get("buildingType") or item.get("buildingSubtype") or "Propiedad"
+        location_txt = item.get("location") or municipality or filters.city
+        title = f"{building_type} en {location_txt}"
 
-        has_elevator = bool(re.search(r"ascensor", text, re.IGNORECASE))
-        has_parking = bool(re.search(r"garaje|parking", text, re.IGNORECASE))
-        has_terrace = bool(re.search(r"terraza", text, re.IGNORECASE))
+        # Client-side filters
+        if filters.price_max and price and price > filters.price_max:
+            return None
+        if filters.price_min and price and price < filters.price_min:
+            return None
+        if filters.rooms_min and rooms and rooms < filters.rooms_min:
+            return None
+        if filters.size_min and size_m2 and size_m2 < filters.size_min:
+            return None
+        if filters.size_max and size_m2 and size_m2 > filters.size_max:
+            return None
+
+        # District text filter (when zone slug not used)
+        if filters.district:
+            search_term = _normalize(filters.district)
+            searchable = _normalize(" ".join(filter(None, [
+                title, full_address, district or "", item.get("description") or "", url
+            ])))
+            if search_term not in searchable:
+                return None
 
         return Property(
             id=prop_id,
-            title=title or f"Propiedad en {district or city}",
+            title=title,
             price=price,
-            size_m2=size_m2,
+            size_m2=float(size_m2) if size_m2 else None,
             rooms=rooms,
             bathrooms=bathrooms,
-            floor=floor_raw,
+            floor=floor,
+            address=full_address or None,
             district=district,
-            city=city,
+            city=filters.city,
+            lat=lat,
+            lon=lon,
             url=url,
             platform=self.platform,
             images=images,
-            has_elevator=has_elevator,
-            has_parking=has_parking,
-            has_terrace=has_terrace,
+            description=(item.get("description") or "")[:500] or None,
+            has_elevator=self._has_feature(features, "elevator"),
+            has_parking=self._has_feature(features, "parking"),
+            has_terrace=self._has_feature(features, "terrace"),
+            is_new_development=bool(item.get("isNewConstruction")),
+            published_at=None,
+            scraped_at=self.now_iso(),
         )
 
-    # ------------------------------------------------------------------
-
     @staticmethod
-    def _extract_price(text: str) -> float | None:
-        m = re.search(r"([\d]{2,3}(?:[.,\s]\d{3})*)\s*€", text)
-        if not m:
+    def _parse_price(raw: str) -> float | None:
+        if not raw:
             return None
-        raw = m.group(1).replace(".", "").replace(",", "").replace(" ", "")
+        # rawPrice may be a number already
         try:
             return float(raw)
+        except (ValueError, TypeError):
+            pass
+        # "650.000 €" or "650,000 €"
+        m = re.search(r"([\d]{2,}(?:[.,\s]\d{3})*)", str(raw))
+        if not m:
+            return None
+        cleaned = m.group(1).replace(".", "").replace(",", "").replace(" ", "")
+        try:
+            return float(cleaned)
         except ValueError:
             return None
 
     @staticmethod
-    def _extract_int(pattern: str, text: str) -> int | None:
-        m = re.search(pattern, text, re.IGNORECASE)
-        return int(m.group(1)) if m else None
-
-    @staticmethod
-    def _extract_float(pattern: str, text: str) -> float | None:
-        m = re.search(pattern, text, re.IGNORECASE)
-        if not m:
-            return None
-        return float(m.group(1).replace(",", "."))
-
-    @staticmethod
-    def _extract_str(pattern: str, text: str) -> str | None:
-        m = re.search(pattern, text, re.IGNORECASE)
-        return m.group(1).strip() if m else None
+    def _has_feature(features: list[dict], key: str) -> bool | None:
+        keys = {f.get("key") for f in features}
+        if key in keys:
+            return True
+        return None

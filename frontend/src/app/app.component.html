@@ -13,8 +13,8 @@
       </label>
 
       <label>
-        Barrio/Zona (opcional)
-        <input type="text" formControlName="district" placeholder="ej: Toyo, Retamar" />
+        Barrio/Zona (o palabras clave)
+        <input type="text" formControlName="keyword" placeholder="ej: Toyo, Retamar" />
       </label>
 
       <label>
@@ -73,8 +73,8 @@
     <p>
       <strong>{{ properties.length }}</strong>
       resultados
-      @if (searchFilters && searchFilters.district) {
-        <span>en <strong>{{ searchFilters.district }}</strong>, {{ searchFilters.city }}</span>
+      @if (searchFilters && searchFilters.keyword) {
+        <span>en <strong>{{ searchFilters.keyword }}</strong>, {{ searchFilters.city }}</span>
       } @else if (platformsQueried.length > 0) {
         <span>en {{ platformsQueried.join(', ') }}</span>
       }
@@ -123,9 +123,9 @@
 
         <a [href]="property.url" target="_blank" rel="noopener noreferrer">Ver anuncio</a>
 
-        @if (searchFilters?.district) {
-          @if (getDistrictSnippet(property)) {
-            <div class="district-snippet" [innerHTML]="getDistrictSnippet(property)"></div>
+        @if (searchFilters?.keyword) {
+          @if (getKeywordSnippet(property)) {
+            <div class="district-snippet" [innerHTML]="getKeywordSnippet(property)"></div>
           }
         }
       </article>

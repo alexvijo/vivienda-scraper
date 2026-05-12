@@ -1,7 +1,10 @@
-# Habitaclia scraper - scrapes www.habitaclia.com
+# Habitaclia scraper - currently blocked by Cloudflare ("Pardon Our Interruption")
+# is_available() returns False so it is skipped without errors.
+# Re-enable when a bypass is available.
 
 import re
 import time
+import unicodedata
 
 import cloudscraper
 from bs4 import BeautifulSoup
@@ -10,9 +13,16 @@ from models.property import Property, SearchFilters
 from scrapers.base_scraper import BaseScraper
 
 
+def _normalize(text: str) -> str:
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
+
 class HabitacliaScraper(BaseScraper):
     platform = "habitaclia"
     base_url = "https://www.habitaclia.com"
+
+    def is_available(self) -> bool:
+        return False
 
     city_slugs = {
         "madrid": "madrid",
@@ -47,19 +57,16 @@ class HabitacliaScraper(BaseScraper):
     def search(self, filters: SearchFilters) -> list[Property]:
         city = filters.city.lower()
         slug = self.city_slugs.get(city, city)
-        # Note: habitaclia does not support district filtering via URL
 
         properties = []
-        pages = 0
 
-        while pages < 3:
-            # Build URL without district (not supported by portal)
-            url = f"{self.base_url}/comprar-piso-en-{slug}.htm"
-            if pages > 0:
-                url += f"?pagina={pages + 1}"
+        for page in range(1, 4):
+            page_url = f"{self.base_url}/comprar-piso-en-{slug}.htm"
+            if page > 1:
+                page_url += f"?pagina={page}"
 
             try:
-                html = self._fetch(url)
+                html = self._fetch(page_url)
                 soup = BeautifulSoup(html, "lxml")
 
                 articles = soup.find_all("article", class_="lnk-anuncio")
@@ -72,9 +79,9 @@ class HabitacliaScraper(BaseScraper):
                         title = title_el.get_text(strip=True) if title_el else "Sin título"
 
                         link_el = article.find("a", class_="lnk-anuncio")
-                        url = link_el["href"] if link_el and link_el.get("href") else ""
-                        if not url.startswith("http"):
-                            url = self.base_url + url
+                        prop_url = link_el["href"] if link_el and link_el.get("href") else ""
+                        if not prop_url.startswith("http"):
+                            prop_url = self.base_url + prop_url
 
                         price_text = article.find("span", class_="precio")
                         price = None
@@ -99,8 +106,8 @@ class HabitacliaScraper(BaseScraper):
                         if img_el and img_el.get("src"):
                             images.append(img_el["src"])
 
-                        address = article.find("span", class_="zona")
-                        address_text = address.get_text(strip=True) if address else None
+                        address_el = article.find("span", class_="zona")
+                        address_text = address_el.get_text(strip=True) if address_el else None
 
                         if filters.price_max and price and price > filters.price_max:
                             continue
@@ -113,9 +120,8 @@ class HabitacliaScraper(BaseScraper):
                         if filters.size_max and size_m2 and size_m2 > filters.size_max:
                             continue
 
-                        # Create property object first
                         prop_obj = Property(
-                            id=url,
+                            id=prop_url,
                             title=title,
                             price=price,
                             price_per_m2=price / size_m2 if price and size_m2 else None,
@@ -128,7 +134,7 @@ class HabitacliaScraper(BaseScraper):
                             city=filters.city,
                             lat=None,
                             lon=None,
-                            url=url,
+                            url=prop_url,
                             platform=self.platform,
                             images=images,
                             description=None,
@@ -140,16 +146,15 @@ class HabitacliaScraper(BaseScraper):
                             scraped_at=self.now_iso(),
                         )
 
-                        # Filter by district if provided (search in title, address, description)
                         if filters.district:
-                            search_term = filters.district.lower()
-                            searchable_text = " ".join([
+                            search_term = _normalize(filters.district)
+                            searchable = _normalize(" ".join([
                                 prop_obj.title or "",
                                 prop_obj.address or "",
                                 prop_obj.description or "",
-                                prop_obj.url or ""
-                            ]).lower()
-                            if search_term not in searchable_text:
+                                prop_obj.url or "",
+                            ]))
+                            if search_term not in searchable:
                                 continue
 
                         properties.append(prop_obj)
@@ -157,10 +162,9 @@ class HabitacliaScraper(BaseScraper):
                         self.logger.debug(f"Error parsing property: {e}")
                         continue
 
-                pages += 1
                 time.sleep(1.0)
             except Exception as e:
-                self.logger.error(f"Error fetching page {pages + 1}: {e}")
+                self.logger.error(f"Error fetching page {page}: {e}")
                 break
 
         return properties

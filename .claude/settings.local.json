@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import urllib.request; r = urllib.request.urlopen\\('https://www.idealista.com/venta-viviendas/almeria.htm', timeout=10\\); print\\('STATUS:', r.status, '| URL:', r.url\\)\")",
+      "Bash(/c/Users/alexv/AppData/Local/Programs/Python/Python313/python.exe -c ' *)",
+      "Bash(pip install *)"
+    ]
+  }
+}

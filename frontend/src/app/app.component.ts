@@ -36,7 +36,7 @@ export class AppComponent implements OnInit {
 
   readonly searchForm = this.fb.group({
     city: ['madrid', [Validators.required, Validators.minLength(2)]],
-    district: [null as string | null],
+    keyword: [null as string | null],
     price_min: [null as number | null],
     price_max: [null as number | null],
     rooms_min: [null as number | null],
@@ -69,8 +69,8 @@ export class AppComponent implements OnInit {
    * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
    * buscando en título, dirección, descripción y url. Resalta el término encontrado.
    */
-  getDistrictSnippet(property: Property): string | null {
-    const term = this.searchFilters?.district?.trim();
+  getKeywordSnippet(property: Property): string | null {
+    const term = this.searchFilters?.keyword?.trim();
     if (!term) return null;
     const termLower = term.toLowerCase();
     const fields = [
@@ -148,17 +148,27 @@ export class AppComponent implements OnInit {
       )
       .subscribe({
         next: async (response) => {
-          this.properties = response.results;
+          let results = response.results;
+          // Si hay filtro de barrio, solo mostrar los que contienen el término
+          if (filters.keyword) {
+            this.searchFilters = filters; // asegurar que getKeywordSnippet use el filtro correcto
+            results = results.filter((p) => this.getKeywordSnippet(p));
+          }
+          this.properties = results;
           this.platformsQueried = response.platforms_queried;
-          // If district is provided, geocode "district, city", otherwise just "city"
-          const searchLocation = filters.district ? `${filters.district}, ${city}` : city;
+          // If keyword is provided, geocode "keyword, city", otherwise just "city"
+          const searchLocation = filters.keyword
+            ? `${filters.keyword}, ${city}`
+            : city;
           const bbox = await this.geocodeCity(searchLocation);
           await this.renderMarkers(bbox);
         },
         error: async () => {
           this.properties = [];
           this.platformsQueried = [];
-          const searchLocation = filters.district ? `${filters.district}, ${city}` : city;
+          const searchLocation = filters.keyword
+            ? `${filters.keyword}, ${city}`
+            : city;
           const bbox = await this.geocodeCity(searchLocation);
           await this.renderMarkers(bbox);
           this.errorMessage =
@@ -221,7 +231,7 @@ export class AppComponent implements OnInit {
 
     return {
       city: raw.city ?? '',
-      district: raw.district ?? undefined,
+      keyword: raw.keyword ?? undefined,
       price_min: raw.price_min,
       price_max: raw.price_max,
       rooms_min: raw.rooms_min,
@@ -255,56 +265,61 @@ export class AppComponent implements OnInit {
 
   /** Queries Nominatim for the city bounding box. Returns null on failure. */
   private async geocodeCity(
+    city: string,
+  ): Promise<[number, number, number, number] | null> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<Array<{ boundingbox?: string[] }>>(
+          'https://nominatim.openstreetmap.org/search',
+          {
+            params: {
+              q: city,
+              format: 'jsonv2',
+              limit: '1',
+            },
+          },
+        ),
+      );
 
-  // ...existing code...
-
-  export class AppComponent implements OnInit {
-    // ...existing code...
-
-    /**
-     * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
-     * buscando en título, dirección, descripción y url. Resalta el término encontrado.
-     */
-    getDistrictSnippet(property: Property): string | null {
-      const term = this.searchFilters?.district?.trim();
-      if (!term) return null;
-      const termLower = term.toLowerCase();
-      const fields = [
-        property.title || '',
-        property.address || '',
-        property.description || '',
-        property.url || '',
-      ];
-      for (const field of fields) {
-        const fieldLower = field.toLowerCase();
-        const idx = fieldLower.indexOf(termLower);
-        if (idx !== -1) {
-          // Encuentra los límites de palabras alrededor del término
-          const words = field.split(/\s+/);
-          let wordIdx = 0, charCount = 0;
-          // Encuentra en qué palabra cae el índice
-          for (; wordIdx < words.length; wordIdx++) {
-            if (charCount + words[wordIdx].length >= idx) break;
-            charCount += words[wordIdx].length + 1;
-          }
-          // Toma hasta 2 palabras antes y después
-          const start = Math.max(0, wordIdx - 2);
-          const end = Math.min(words.length, wordIdx + 3);
-          const snippetWords = words.slice(start, end);
-          // Resalta el término (case-insensitive)
-          const snippet = snippetWords
-            .map(w => w.toLowerCase().includes(termLower) ? `<mark>${w}</mark>` : w)
-            .join(' ');
-          return '...' + snippet + '...';
-        }
+      const bbox = response?.[0]?.boundingbox;
+      if (!bbox || bbox.length < 4) {
+        return null;
       }
+
+      const south = Number(bbox[0]);
+      const north = Number(bbox[1]);
+      const west = Number(bbox[2]);
+      const east = Number(bbox[3]);
+
+      if ([south, north, west, east].some((value) => Number.isNaN(value))) {
+        return null;
+      }
+
+      return [south, north, west, east];
+    } catch {
       return null;
     }
+  }
 
-  // ...existing code...
+  private async renderMarkers(
+    cityBbox: [number, number, number, number] | null,
+  ): Promise<void> {
+    await this.ensureMap();
+
+    if (!this.map || !this.leaflet) {
+      return;
+    }
+
+    for (const marker of this.markers) {
+      marker.remove();
+    }
+    this.markers = [];
+
+    const locatedProperties = this.properties.filter(
+      (property) => property.lat !== null && property.lon !== null,
     );
 
-    // If we have coordinates, fit to markers; otherwise fit to city bbox
+    // If we have coordinates, fit to markers; otherwise fit to city bbox.
     if (locatedProperties.length > 0) {
       const markerIcon = this.leaflet.icon({
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -338,7 +353,7 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    // No coordinates — zoom to city bounding box from Nominatim
+    // No coordinates: zoom to city bounding box from Nominatim.
     if (cityBbox) {
       const [s, n, w, e] = cityBbox;
       this.map.fitBounds(
@@ -351,7 +366,7 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    // Fallback: Spain
+    // Fallback: Spain.
     this.map.setView([40.4168, -3.7038], 6);
   }
 }

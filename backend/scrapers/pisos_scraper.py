@@ -8,6 +8,7 @@ import hashlib
 import logging
 import re
 import time
+import unicodedata
 
 import cloudscraper
 from bs4 import BeautifulSoup, Tag
@@ -17,6 +18,10 @@ from models.property import Property, SearchFilters
 from scrapers.base_scraper import BaseScraper
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize(text: str) -> str:
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
 
 BASE_URL = "https://www.pisos.com"
 
@@ -82,9 +87,10 @@ class PisosScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     def _build_url(self, city_slug: str, page: int) -> str:
+        # fecharecientedesde-desc = most recently published first
         if page == 1:
-            return f"{BASE_URL}/venta/pisos-{city_slug}/"
-        return f"{BASE_URL}/venta/pisos-{city_slug}/{page}/"
+            return f"{BASE_URL}/venta/pisos-{city_slug}/fecharecientedesde-desc/"
+        return f"{BASE_URL}/venta/pisos-{city_slug}/fecharecientedesde-desc/{page}/"
 
     def _fetch(self, url: str) -> str:
         resp = self._scraper.get(url, timeout=self._settings.REQUEST_TIMEOUT)
@@ -113,15 +119,14 @@ class PisosScraper(BaseScraper):
                     continue
                 if filters.size_max is not None and prop.size_m2 is not None and prop.size_m2 > filters.size_max:
                     continue
-                # Filter by district if provided (search in title, address, description)
                 if filters.district:
-                    search_term = filters.district.lower()
-                    searchable_text = " ".join([
+                    search_term = _normalize(filters.district)
+                    searchable_text = _normalize(" ".join([
                         prop.title or "",
                         prop.address or "",
                         prop.description or "",
-                        prop.url or ""
-                    ]).lower()
+                        prop.url or "",
+                    ]))
                     if search_term not in searchable_text:
                         continue
                 properties.append(prop)

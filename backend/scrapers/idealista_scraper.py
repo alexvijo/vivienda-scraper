@@ -16,6 +16,7 @@ import hashlib
 import logging
 import re
 import time
+import unicodedata
 from urllib.parse import urlencode
 
 import cloudscraper
@@ -27,6 +28,13 @@ from scrapers.base_scraper import BaseScraper
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize(text: str) -> str:
+    """Lowercase + strip accents so 'Almería' matches 'almeria', 'Toyo' matches 'toyo'."""
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
+# Idealista city slugs — must match the URL segment used in /venta-viviendas/<slug>/
+# For municipalities the suffix is "-municipio" (e.g. almeria-municipio).
 CITY_SLUGS: dict[str, str] = {
     "madrid": "madrid",
     "barcelona": "barcelona",
@@ -37,8 +45,8 @@ CITY_SLUGS: dict[str, str] = {
     "malaga": "malaga",
     "alicante": "alicante",
     "murcia": "murcia",
-    "almeria": "almeria",
-    "almería": "almeria",
+    "almeria": "almeria-municipio",
+    "almería": "almeria-municipio",
     "granada": "granada",
     "cordoba": "cordoba",
     "valladolid": "valladolid",
@@ -48,6 +56,20 @@ CITY_SLUGS: dict[str, str] = {
     "santander": "santander",
     "pamplona": "pamplona",
     "salamanca": "salamanca",
+}
+
+# When a district keyword matches one of these entries we swap the city slug for the
+# neighbourhood slug so Idealista returns pre-filtered results (more reliable than
+# post-scraping text search on city-level pages).
+# Key: normalized district term  →  Value: Idealista neighbourhood path segment
+# Pattern: /venta-viviendas/<city-province>/<neighbourhood-slug>/
+DISTRICT_SLUGS: dict[str, str] = {
+    # Almería neighbourhoods / zones
+    "retamar": "almeria/retamar-aguadulce",
+    "toyo": "almeria/el-toyo-cabo-de-gata",
+    "aguadulce": "almeria/retamar-aguadulce",
+    "cabo de gata": "almeria/el-toyo-cabo-de-gata",
+    "el toyo": "almeria/el-toyo-cabo-de-gata",
 }
 
 BASE_URL = "https://www.idealista.com"
@@ -66,8 +88,16 @@ class IdealistaScraper(BaseScraper):
         properties: list[Property] = []
         city_slug = CITY_SLUGS.get(filters.city.lower(), filters.city.lower())
 
+        # If the district keyword matches a known Idealista neighbourhood slug, use it
+        # directly so results come pre-filtered and we skip text-search post-processing.
+        district_slug = None
+        if filters.district:
+            district_slug = DISTRICT_SLUGS.get(_normalize(filters.district.strip()))
+
+        search_slug = district_slug if district_slug else city_slug
+
         for page in range(1, self._settings.MAX_PAGES + 1):
-            url = self._build_url(city_slug, filters, page)
+            url = self._build_url(search_slug, filters, page)
             try:
                 html = self._fetch(url)
             except Exception as exc:
@@ -81,16 +111,32 @@ class IdealistaScraper(BaseScraper):
             properties.extend(page_props)
             time.sleep(1.5)  # polite delay
 
+        # Post-scraping text filter only when no direct neighbourhood slug was used
+        if filters.district and not district_slug:
+            search_term = _normalize(filters.district)
+            properties = [
+                p for p in properties
+                if search_term in _normalize(
+                    " ".join([p.title or "", p.address or "", p.description or "", p.url or ""])
+                )
+            ]
+
         return properties
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_url(self, city_slug: str, filters: SearchFilters, page: int) -> str:
-        path = f"/venta-viviendas/{city_slug}/"
-        params: dict[str, str] = {}
+    def _build_url(self, slug: str, filters: SearchFilters, page: int) -> str:
+        # Idealista URL structure:
+        #   Page 1:  /venta-viviendas/<slug>/
+        #   Page N:  /venta-viviendas/<slug>/pagina-N.htm
+        if page > 1:
+            path = f"/venta-viviendas/{slug}/pagina-{page}.htm"
+        else:
+            path = f"/venta-viviendas/{slug}/"
 
+        params: dict[str, str] = {}
         if filters.price_max is not None:
             params["preciomax"] = str(int(filters.price_max))
         if filters.price_min is not None:
@@ -101,11 +147,6 @@ class IdealistaScraper(BaseScraper):
             params["superficiemin"] = str(int(filters.size_min))
         if filters.size_max is not None:
             params["superficiemax"] = str(int(filters.size_max))
-
-        if page > 1:
-            path = path.rstrip("/") + f"/pagina-{page}.htm"
-        else:
-            path = path.rstrip("/") + ".htm"
 
         qs = ("?" + urlencode(params)) if params else ""
         return BASE_URL + path + qs

@@ -1,7 +1,12 @@
-# Yaencontre scraper - scrapes www.yaencontre.com
+# Yaencontre scraper - parses window.__INITIAL_STATE__ base64 JSON
 
+import base64
+import hashlib
+import json
+import logging
 import re
 import time
+import unicodedata
 
 import cloudscraper
 from bs4 import BeautifulSoup
@@ -9,138 +14,188 @@ from bs4 import BeautifulSoup
 from models.property import Property, SearchFilters
 from scrapers.base_scraper import BaseScraper
 
+logger = logging.getLogger(__name__)
+
+BASE_URL = "https://www.yaencontre.com"
+IMAGE_BASE = "https://static.yaencontre.com/fotos/"
+
+CITY_SLUGS: dict[str, str] = {
+    "madrid": "madrid",
+    "barcelona": "barcelona",
+    "valencia": "valencia",
+    "sevilla": "sevilla",
+    "bilbao": "bilbao",
+    "zaragoza": "zaragoza",
+    "malaga": "malaga",
+    "alicante": "alicante",
+    "murcia": "murcia",
+    "almeria": "almeria",
+    "almería": "almeria",
+    "granada": "granada",
+    "cordoba": "cordoba",
+    "valladolid": "valladolid",
+    "vigo": "vigo",
+    "gijon": "gijon",
+    "vitoria": "vitoria",
+    "santander": "santander",
+    "pamplona": "pamplona",
+    "salamanca": "salamanca",
+}
+
+
+def _normalize(text: str) -> str:
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
 
 class YaencontreScraper(BaseScraper):
     platform = "yaencontre"
-    base_url = "https://www.yaencontre.com"
-
-    city_slugs = {
-        "madrid": "madrid",
-        "barcelona": "barcelona",
-        "valencia": "valencia",
-        "sevilla": "sevilla",
-        "bilbao": "bilbao",
-        "zaragoza": "zaragoza",
-        "malaga": "malaga",
-        "alicante": "alicante",
-        "murcia": "murcia",
-        "almeria": "almeria",
-        "almería": "almeria",
-        "granada": "granada",
-        "cordoba": "cordoba",
-        "valladolid": "valladolid",
-        "vigo": "vigo",
-        "gijon": "gijon",
-        "vitoria": "vitoria",
-        "santander": "santander",
-        "pamplona": "pamplona",
-        "salamanca": "salamanca",
-    }
 
     def _fetch(self, url: str) -> str:
-        """Fetch HTML with cloudscraper."""
-        scraper = cloudscraper.create_scraper()
-        resp = scraper.get(url, timeout=10)
+        scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
+        resp = scraper.get(url, timeout=15)
         resp.encoding = "utf-8"
         return resp.text
 
     def search(self, filters: SearchFilters) -> list[Property]:
         city = filters.city.lower()
-        slug = self.city_slugs.get(city, city)
-        # Note: yaencontre does not support district filtering via URL
+        slug = CITY_SLUGS.get(city, city)
 
-        properties = []
-        pages = 0
+        properties: list[Property] = []
 
-        while pages < 3:
-            # Build URL without district (not supported by portal)
-            url = f"{self.base_url}/inmuebles-en-venta-{slug}.html"
-            if pages > 0:
-                url += f"?p={pages + 1}"
+        for page in range(1, 4):
+            url = f"{BASE_URL}/venta/pisos/{slug}"
+            if page > 1:
+                url += f"?page={page}"
 
             try:
                 html = self._fetch(url)
-                soup = BeautifulSoup(html, "lxml")
-
-                # YaEncontre uses div.real-state-item or similar containers
-                items = soup.find_all("div", class_=re.compile(r"real-state|item|property"))
+                items = self._extract_items(html)
                 if not items:
                     break
 
-                for item in items:
+                for item_data in items:
                     try:
-                        # Try to extract basic info
-                        link = item.find("a", href=re.compile(r"/inmueble/"))
-                        if not link or not link.get("href"):
+                        prop = self._parse_item(item_data, filters.city)
+                        if prop is None:
                             continue
 
-                        url = link["href"]
-                        if not url.startswith("http"):
-                            url = self.base_url + url
-
-                        title = item.find("h2") or item.find("h3")
-                        title_text = title.get_text(strip=True) if title else "Sin título"
-
-                        price_el = item.find("span", class_=re.compile(r"price|precio"))
-                        price = None
-                        if price_el:
-                            price_str = re.sub(r"[^\d]", "", price_el.get_text())
-                            price = int(price_str) if price_str else None
-
-                        if filters.price_max and price and price > filters.price_max:
+                        if filters.price_max and prop.price and prop.price > filters.price_max:
                             continue
-                        if filters.price_min and price and price < filters.price_min:
+                        if filters.price_min and prop.price and prop.price < filters.price_min:
+                            continue
+                        if filters.rooms_min and prop.rooms and prop.rooms < filters.rooms_min:
+                            continue
+                        if filters.size_min and prop.size_m2 and prop.size_m2 < filters.size_min:
+                            continue
+                        if filters.size_max and prop.size_m2 and prop.size_m2 > filters.size_max:
                             continue
 
-                        # Create property object first
-                        prop_obj = Property(
-                            id=url,
-                            title=title_text,
-                            price=price,
-                            price_per_m2=None,
-                            size_m2=None,
-                            rooms=None,
-                            bathrooms=None,
-                            floor=None,
-                            address=None,
-                            district=None,
-                            city=filters.city,
-                            lat=None,
-                            lon=None,
-                            url=url,
-                            platform=self.platform,
-                            images=[],
-                            description=None,
-                            has_elevator=None,
-                            has_parking=None,
-                            has_terrace=None,
-                            is_new_development=None,
-                            published_at=None,
-                            scraped_at=self.now_iso(),
-                        )
-
-                        # Filter by district if provided (search in title, address, description)
                         if filters.district:
-                            search_term = filters.district.lower()
-                            searchable_text = " ".join([
-                                prop_obj.title or "",
-                                prop_obj.address or "",
-                                prop_obj.description or "",
-                                prop_obj.url or ""
-                            ]).lower()
-                            if search_term not in searchable_text:
+                            search_term = _normalize(filters.district)
+                            searchable = _normalize(" ".join([
+                                prop.title or "",
+                                prop.address or "",
+                                prop.district or "",
+                                prop.description or "",
+                                prop.url or "",
+                            ]))
+                            if search_term not in searchable:
                                 continue
 
-                        properties.append(prop_obj)
-                        )
+                        properties.append(prop)
                     except Exception as e:
-                        self.logger.debug(f"Error parsing property: {e}")
-                        continue
+                        logger.debug("Error parsing yaencontre item: %s", e)
 
-                pages += 1
                 time.sleep(1.0)
             except Exception as e:
-                self.logger.error(f"Error fetching page {pages + 1}: {e}")
+                logger.error("Error fetching yaencontre page %d: %s", page, e)
                 break
 
         return properties
+
+    def _extract_items(self, html: str) -> list[dict]:
+        soup = BeautifulSoup(html, "lxml")
+        for script in soup.find_all("script", src=False):
+            txt = script.get_text()
+            m = re.search(r"window\.__INITIAL_STATE__\s*=\s*JSON\.parse\(atob\([\"'](.*?)[\"']\)", txt)
+            if not m:
+                continue
+            try:
+                decoded = base64.b64decode(m.group(1)).decode("utf-8")
+                data = json.loads(decoded)
+                results = data.get("results", {})
+                by_id = results.get("currentPageItems", {}).get("byId", {})
+                sorted_ids = results.get("currentPageItems", {}).get("sortedItems", [])
+                return [by_id[k] for k in sorted_ids if k in by_id]
+            except Exception as e:
+                logger.debug("Failed to decode yaencontre state: %s", e)
+        return []
+
+    def _parse_item(self, item_data: dict, city: str) -> Property | None:
+        item = item_data.get("item", item_data)
+
+        ref = item.get("reference") or item.get("id", "")
+        prop_url = f"{BASE_URL}/inmueble/{ref}" if ref else None
+        if not prop_url:
+            return None
+
+        prop_id = hashlib.md5(prop_url.encode()).hexdigest()[:12]
+        title = item.get("title") or f"Propiedad en {city}"
+        description = item.get("description")
+        price = item.get("price")
+        size_m2 = item.get("area")
+        rooms = item.get("rooms")
+        bathrooms = item.get("bathrooms")
+
+        address_data = item.get("address", {})
+        full_address = address_data.get("qualifiedName") or address_data.get("street")
+        geo = address_data.get("geoLocation", {})
+        lat = geo.get("lat")
+        lon = geo.get("lon")
+
+        # district = first part of qualifiedName (e.g. "Retamar, Almería, ...")
+        district = None
+        if full_address:
+            parts = [p.strip() for p in full_address.split(",")]
+            if parts:
+                district = parts[0]
+
+        # Images
+        images: list[str] = []
+        for img in item.get("images", []):
+            slug = img.get("slug") or img.get("url", "")
+            if slug:
+                src = slug if slug.startswith("http") else IMAGE_BASE + slug
+                images.append(src)
+                if len(images) >= 3:
+                    break
+
+        price_per_m2 = item.get("squareMeterPrice")
+
+        return Property(
+            id=prop_id,
+            title=title,
+            price=float(price) if price is not None else None,
+            price_per_m2=float(price_per_m2) if price_per_m2 is not None else None,
+            size_m2=float(size_m2) if size_m2 is not None else None,
+            rooms=int(rooms) if rooms is not None else None,
+            bathrooms=int(bathrooms) if bathrooms is not None else None,
+            floor=None,
+            address=full_address,
+            district=district,
+            city=city,
+            lat=lat,
+            lon=lon,
+            url=prop_url,
+            platform=self.platform,
+            images=images,
+            description=description,
+            has_elevator=None,
+            has_parking=None,
+            has_terrace=None,
+            is_new_development=item.get("family") == "NEW_DEVELOPMENT",
+            published_at=None,
+            scraped_at=self.now_iso(),
+        )

@@ -28,6 +28,7 @@ export class SearchApiService {
     params = this.addParam(params, 'rooms_min', filters.rooms_min);
     params = this.addParam(params, 'size_min', filters.size_min);
     params = this.addParam(params, 'size_max', filters.size_max);
+    params = this.addParam(params, 'keyword', filters.keyword);
     params = this.addParam(params, 'page', filters.page ?? 1);
 
     for (const platform of filters.platforms) {

@@ -1,3 +1,22 @@
+// Resaltado de fragmento de barrio
+.district-snippet {
+	margin-top: 0.5rem;
+	font-size: 0.98em;
+	color: var(--ink);
+	background: #fffbe6;
+	border-left: 3px solid var(--brand);
+	padding: 0.2em 0.7em;
+	border-radius: 0 6px 6px 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+.district-snippet mark {
+	background: #ffe066;
+	color: #1f2a37;
+	font-weight: bold;
+	padding: 0 2px;
+	border-radius: 2px;
+}
 :host {
 	--bg: #f4efe5;
 	--paper: #fffdf8;

@@ -1,7 +1,11 @@
-# Trovimap scraper - scrapes www.trovimap.com
+# Trovimap scraper - combines div.listing__container (price/details) + JSON-LD (geo/address)
 
+import hashlib
+import json
+import logging
 import re
 import time
+import unicodedata
 
 import cloudscraper
 from bs4 import BeautifulSoup
@@ -9,142 +13,246 @@ from bs4 import BeautifulSoup
 from models.property import Property, SearchFilters
 from scrapers.base_scraper import BaseScraper
 
+logger = logging.getLogger(__name__)
+
+BASE_URL = "https://www.trovimap.com"
+
+CITY_SLUGS: dict[str, str] = {
+    "madrid": "Madrid",
+    "barcelona": "Barcelona",
+    "valencia": "Valencia",
+    "sevilla": "Sevilla",
+    "bilbao": "Bilbao",
+    "zaragoza": "Zaragoza",
+    "malaga": "Malaga",
+    "alicante": "Alicante",
+    "murcia": "Murcia",
+    "almeria": "Almeria",
+    "almería": "Almeria",
+    "granada": "Granada",
+    "cordoba": "Cordoba",
+    "valladolid": "Valladolid",
+    "vigo": "Vigo",
+    "gijon": "Gijon",
+    "vitoria": "Vitoria",
+    "santander": "Santander",
+    "pamplona": "Pamplona",
+    "salamanca": "Salamanca",
+}
+
+
+def _normalize(text: str) -> str:
+    return unicodedata.normalize("NFD", text.lower()).encode("ascii", "ignore").decode()
+
 
 class TrovimapScraper(BaseScraper):
     platform = "trovimap"
-    base_url = "https://www.trovimap.com"
-
-    city_slugs = {
-        "madrid": "madrid",
-        "barcelona": "barcelona",
-        "valencia": "valencia",
-        "sevilla": "sevilla",
-        "bilbao": "bilbao",
-        "zaragoza": "zaragoza",
-        "malaga": "malaga",
-        "alicante": "alicante",
-        "murcia": "murcia",
-        "almeria": "almeria",
-        "almería": "almeria",
-        "granada": "granada",
-        "cordoba": "cordoba",
-        "valladolid": "valladolid",
-        "vigo": "vigo",
-        "gijon": "gijon",
-        "vitoria": "vitoria",
-        "santander": "santander",
-        "pamplona": "pamplona",
-        "salamanca": "salamanca",
-    }
 
     def _fetch(self, url: str) -> str:
-        """Fetch HTML with cloudscraper."""
-        scraper = cloudscraper.create_scraper()
-        resp = scraper.get(url, timeout=10)
+        scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
+        resp = scraper.get(url, timeout=15)
         resp.encoding = "utf-8"
         return resp.text
 
     def search(self, filters: SearchFilters) -> list[Property]:
         city = filters.city.lower()
-        slug = self.city_slugs.get(city, city)
-        # Note: trovimap does not support district filtering via URL
+        slug = CITY_SLUGS.get(city, city.capitalize())
 
-        properties = []
-        pages = 0
+        properties: list[Property] = []
 
-        while pages < 3:
-            # Build URL without district (not supported by portal)
-            url = f"{self.base_url}/buscar/vivienda/{slug}"
-            if pages > 0:
-                url += f"?page={pages + 1}"
+        for page in range(1, 4):
+            url = f"{BASE_URL}/venta/vivienda/{slug}"
+            if page > 1:
+                url += f"?page={page}"
 
             try:
                 html = self._fetch(url)
-                soup = BeautifulSoup(html, "lxml")
-
-                # Trovimap uses article or div.property containers
-                items = soup.find_all(["article", "div"], class_=re.compile(r"property|listing|item"))
-                if not items:
+                page_props = self._parse(html, filters)
+                if not page_props:
                     break
 
-                for item in items:
-                    try:
-                        link = item.find("a", href=re.compile(r"/propiedad/|/vivienda/"))
-                        if not link or not link.get("href"):
-                            continue
-
-                        url = link["href"]
-                        if not url.startswith("http"):
-                            url = self.base_url + url
-
-                        title = item.find("h2") or item.find("h3")
-                        title_text = title.get_text(strip=True) if title else "Sin título"
-
-                        # Extract price
-                        price_el = item.find("span", class_=re.compile(r"price|precio"))
-                        if not price_el:
-                            price_el = item.find(string=re.compile(r"€"))
-                        price = None
-                        if price_el:
-                            price_str = re.sub(r"[^\d]", "", price_el.get_text())
-                            price = int(price_str) if price_str else None
-
-                        if filters.price_max and price and price > filters.price_max:
-                            continue
-                        if filters.price_min and price and price < filters.price_min:
-                            continue
-
-                        # Create property object first
-                        prop_obj = Property(
-                            id=url,
-                            title=title_text,
-                            price=price,
-                            price_per_m2=None,
-                            size_m2=None,
-                            rooms=None,
-                            bathrooms=None,
-                            floor=None,
-                            address=None,
-                            district=None,
-                            city=filters.city,
-                            lat=None,
-                            lon=None,
-                            url=url,
-                            platform=self.platform,
-                            images=[],
-                            description=None,
-                            has_elevator=None,
-                            has_parking=None,
-                            has_terrace=None,
-                            is_new_development=None,
-                            published_at=None,
-                            scraped_at=self.now_iso(),
-                        )
-
-                        # Filter by district if provided (search in title, address, description)
-                        if filters.district:
-                            search_term = filters.district.lower()
-                            searchable_text = " ".join([
-                                prop_obj.title or "",
-                                prop_obj.address or "",
-                                prop_obj.description or "",
-                                prop_obj.url or ""
-                            ]).lower()
-                            if search_term not in searchable_text:
-                                continue
-
-                        properties.append(prop_obj)
-                                scraped_at=self.now_iso(),
-                            )
-                        )
-                    except Exception as e:
-                        self.logger.debug(f"Error parsing property: {e}")
-                        continue
-
-                pages += 1
+                properties.extend(page_props)
                 time.sleep(1.0)
             except Exception as e:
-                self.logger.error(f"Error fetching page {pages + 1}: {e}")
+                logger.error("Error fetching trovimap page %d: %s", page, e)
                 break
 
         return properties
+
+    def _parse(self, html: str, filters: SearchFilters) -> list[Property]:
+        soup = BeautifulSoup(html, "lxml")
+
+        # Build geo/address lookup from JSON-LD keyed by the @id (e.g. "349169-40765417")
+        geo_by_id: dict[str, dict] = {}
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.get_text())
+                if not isinstance(data, list):
+                    continue
+                for item in data:
+                    if item.get("@type") not in (
+                        "Apartment", "House", "SingleFamilyResidence",
+                        "Residence", "RealEstateListing",
+                    ):
+                        continue
+                    item_id = item.get("@id", "")
+                    geo_by_id[item_id] = {
+                        "lat": item.get("geo", {}).get("latitude"),
+                        "lon": item.get("geo", {}).get("longitude"),
+                        "locality": item.get("address", {}).get("addressLocality"),
+                        "rooms": item.get("numberOfRooms"),
+                        "name": item.get("name"),
+                        "description": item.get("description"),
+                    }
+            except Exception:
+                pass
+
+        # Parse HTML cards
+        cards = soup.select("div.listing__container")
+        properties: list[Property] = []
+
+        for card in cards:
+            try:
+                prop = self._parse_card(card, filters.city, geo_by_id)
+                if prop is None:
+                    continue
+
+                if filters.price_max and prop.price and prop.price > filters.price_max:
+                    continue
+                if filters.price_min and prop.price and prop.price < filters.price_min:
+                    continue
+                if filters.rooms_min and prop.rooms and prop.rooms < filters.rooms_min:
+                    continue
+                if filters.size_min and prop.size_m2 and prop.size_m2 < filters.size_min:
+                    continue
+                if filters.size_max and prop.size_m2 and prop.size_m2 > filters.size_max:
+                    continue
+
+                if filters.district:
+                    search_term = _normalize(filters.district)
+                    searchable = _normalize(" ".join([
+                        prop.title or "",
+                        prop.address or "",
+                        prop.district or "",
+                        prop.description or "",
+                        prop.url or "",
+                    ]))
+                    if search_term not in searchable:
+                        continue
+
+                properties.append(prop)
+            except Exception as e:
+                logger.debug("Error parsing trovimap card: %s", e)
+
+        return properties
+
+    def _parse_card(self, card, city: str, geo_by_id: dict) -> Property | None:
+        link = card.find("a", href=re.compile(r"/inmueble/"))
+        if not link:
+            return None
+
+        href = link["href"]
+        prop_url = BASE_URL + href if href.startswith("/") else href
+        prop_id = hashlib.md5(prop_url.encode()).hexdigest()[:12]
+
+        # The @id in JSON-LD is the path segment after /inmueble/
+        json_ld_id = href.split("/inmueble/")[-1].strip("/")
+        geo_data = geo_by_id.get(json_ld_id, {})
+
+        texts = [t.strip() for t in card.stripped_strings if t.strip()]
+        full_text = " | ".join(texts)
+
+        # Price: first h4 with € sign
+        price_h4 = card.find("h4")
+        price = self._extract_price(price_h4.get_text() if price_h4 else full_text)
+
+        # Size: "95 m²"
+        size_m2 = self._extract_float(r"(\d+(?:[.,]\d+)?)\s*m²", full_text)
+
+        # Rooms: geo_data has it from JSON-LD, fallback to HTML icon count
+        rooms = geo_data.get("rooms")
+        if rooms is None:
+            # Trovimap shows rooms as a number right after the size
+            m = re.search(r"m²\s*\|\s*(\d+)\s*\|", full_text)
+            rooms = int(m.group(1)) if m else None
+
+        # Title and description come from JSON-LD (most reliable)
+        title = geo_data.get("name")
+        description = geo_data.get("description")
+
+        # Fallback: pick longest non-price text from HTML
+        if not title:
+            for t in texts:
+                if (len(t) > 10 and "€" not in t and "m²" not in t
+                        and "Contactar" not in t and "Compra" not in t
+                        and "Agente" not in t):
+                    title = t
+                    break
+        if not title:
+            title = f"Propiedad en {city}"
+
+        # Address from JSON-LD locality
+        locality = geo_data.get("locality")
+        address = locality or city
+
+        # Image: cards use lazy-loading — real URL may be in data-src / data-lazy / data-original
+        images: list[str] = []
+        for img in card.find_all("img"):
+            src = (
+                img.get("data-src")
+                or img.get("data-lazy")
+                or img.get("data-original")
+                or img.get("src", "")
+            )
+            if src and src.startswith("http") and "svg" not in src and not src.startswith("data:"):
+                images.append(src)
+                break
+
+        has_elevator = bool(re.search(r"ascensor", full_text, re.IGNORECASE))
+        has_parking = bool(re.search(r"garaje|parking", full_text, re.IGNORECASE))
+        has_terrace = bool(re.search(r"terraza", full_text, re.IGNORECASE))
+
+        return Property(
+            id=prop_id,
+            title=title,
+            price=price,
+            size_m2=size_m2,
+            rooms=int(rooms) if rooms is not None else None,
+            bathrooms=None,
+            floor=None,
+            address=address,
+            district=locality,
+            city=city,
+            lat=geo_data.get("lat"),
+            lon=geo_data.get("lon"),
+            url=prop_url,
+            platform=self.platform,
+            images=images,
+            description=description,
+            has_elevator=has_elevator,
+            has_parking=has_parking,
+            has_terrace=has_terrace,
+            is_new_development=None,
+            published_at=None,
+            scraped_at=self.now_iso(),
+        )
+
+    @staticmethod
+    def _extract_price(text: str) -> float | None:
+        m = re.search(r"([\d]{2,3}(?:[.,\s]\d{3})*)\s*€", text)
+        if not m:
+            return None
+        raw = m.group(1).replace(".", "").replace(",", "").replace(" ", "")
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _extract_float(pattern: str, text: str) -> float | None:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if not m:
+            return None
+        return float(m.group(1).replace(",", "."))

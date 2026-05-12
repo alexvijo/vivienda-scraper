@@ -33,7 +33,7 @@ export interface SearchResponse {
 
 export interface SearchFilters {
   city: string;
-  district?: string | null;
+  keyword?: string | null;
   price_min?: number | null;
   price_max?: number | null;
   rooms_min?: number | null;
