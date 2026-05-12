@@ -47,6 +47,7 @@ export class AppComponent implements OnInit {
   selectedPlatforms = new Set<string>(['idealista']);
   properties: Property[] = [];
   platformsQueried: string[] = [];
+  searchFilters: SearchFilters | null = null;
 
   loading = false;
   initialized = false;
@@ -94,6 +95,7 @@ export class AppComponent implements OnInit {
 
     const city = this.searchForm.value.city ?? 'madrid';
     const filters = this.buildFilters();
+    this.searchFilters = filters; // Store filters for display
 
     this.searchApi
       .search(filters)
@@ -107,13 +109,16 @@ export class AppComponent implements OnInit {
         next: async (response) => {
           this.properties = response.results;
           this.platformsQueried = response.platforms_queried;
-          const bbox = await this.geocodeCity(city);
+          // If district is provided, geocode "district, city", otherwise just "city"
+          const searchLocation = filters.district ? `${filters.district}, ${city}` : city;
+          const bbox = await this.geocodeCity(searchLocation);
           await this.renderMarkers(bbox);
         },
         error: async () => {
           this.properties = [];
           this.platformsQueried = [];
-          const bbox = await this.geocodeCity(city);
+          const searchLocation = filters.district ? `${filters.district}, ${city}` : city;
+          const bbox = await this.geocodeCity(searchLocation);
           await this.renderMarkers(bbox);
           this.errorMessage =
             'Could not load properties. Make sure backend is running on localhost:8000.';
