@@ -73,12 +73,10 @@
     <p>
       <strong>{{ properties.length }}</strong>
       resultados
-      @if (searchFilters?.district) {
+      @if (searchFilters && searchFilters.district) {
         <span>en <strong>{{ searchFilters.district }}</strong>, {{ searchFilters.city }}</span>
-      } @else {
-        @if (platformsQueried.length > 0) {
-          <span>en {{ platformsQueried.join(', ') }}</span>
-        }
+      } @else if (platformsQueried.length > 0) {
+        <span>en {{ platformsQueried.join(', ') }}</span>
       }
     </p>
   </section>
