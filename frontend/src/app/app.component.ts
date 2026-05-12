@@ -135,7 +135,6 @@ export class AppComponent implements OnInit {
   async ngAfterViewInit(): Promise<void> {
     this.viewReady = true;
     await this.ensureMap();
-    await this.renderMarkers(null);
   }
 
   ngOnDestroy(): void {
@@ -277,17 +276,27 @@ export class AppComponent implements OnInit {
     const leaflet = await import('leaflet');
     this.leaflet = leaflet;
 
+    const streets = leaflet.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' },
+    );
+
+    const satellite = leaflet.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: '&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP' },
+    );
+
     this.map = leaflet.map(this.mapContainer.nativeElement, {
       zoomControl: true,
       attributionControl: true,
+      layers: [streets],
     }).setView([40.4168, -3.7038], 6);
 
-    leaflet
-      .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-      })
-      .addTo(this.map);
+    leaflet.control.layers(
+      { 'Mapa': streets, 'Satélite': satellite },
+      {},
+      { position: 'topright' },
+    ).addTo(this.map);
   }
 
   /** Queries Nominatim for the city bounding box. Returns null on failure. */
