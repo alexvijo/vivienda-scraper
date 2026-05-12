@@ -1,66 +1,5 @@
 
-// ...existing imports...
 
-@Component({
-  selector: 'app-root',
-  standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss',
-})
-export class AppComponent implements OnInit {
-  @ViewChild('mapContainer')
-  private mapContainer?: ElementRef<HTMLDivElement>;
-
-  // ...existing properties...
-
-  constructor(
-    private readonly fb: FormBuilder,
-    private readonly searchApi: SearchApiService,
-    private readonly http: HttpClient,
-  ) {}
-
-  /**
-   * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
-   * buscando en título, dirección, descripción y url. Resalta el término encontrado.
-   */
-  getDistrictSnippet(property: Property): string | null {
-    const term = this.searchFilters?.district?.trim();
-    if (!term) return null;
-    const termLower = term.toLowerCase();
-    const fields = [
-      property.title || '',
-      property.address || '',
-      property.description || '',
-      property.url || '',
-    ];
-    for (const field of fields) {
-      const fieldLower = field.toLowerCase();
-      const idx = fieldLower.indexOf(termLower);
-      if (idx !== -1) {
-        // Encuentra los límites de palabras alrededor del término
-        const words = field.split(/\s+/);
-        let wordIdx = 0, charCount = 0;
-        // Encuentra en qué palabra cae el índice
-        for (; wordIdx < words.length; wordIdx++) {
-          if (charCount + words[wordIdx].length >= idx) break;
-          charCount += words[wordIdx].length + 1;
-        }
-        // Toma hasta 2 palabras antes y después
-        const start = Math.max(0, wordIdx - 2);
-        const end = Math.min(words.length, wordIdx + 3);
-        const snippetWords = words.slice(start, end);
-        // Resalta el término (case-insensitive)
-        const snippet = snippetWords
-          .map(w => w.toLowerCase().includes(termLower) ? `<mark>${w}</mark>` : w)
-          .join(' ');
-        return '...' + snippet + '...';
-      }
-    }
-    return null;
-  }
-
-// ...existing code...
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import {
@@ -73,7 +12,6 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, firstValueFrom } from 'rxjs';
-
 import {
   PlatformAvailability,
   Property,
@@ -126,6 +64,46 @@ export class AppComponent implements OnInit {
     private readonly searchApi: SearchApiService,
     private readonly http: HttpClient,
   ) {}
+
+  /**
+   * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
+   * buscando en título, dirección, descripción y url. Resalta el término encontrado.
+   */
+  getDistrictSnippet(property: Property): string | null {
+    const term = this.searchFilters?.district?.trim();
+    if (!term) return null;
+    const termLower = term.toLowerCase();
+    const fields = [
+      property.title || '',
+      property.address || '',
+      property.description || '',
+      property.url || '',
+    ];
+    for (const field of fields) {
+      const fieldLower = field.toLowerCase();
+      const idx = fieldLower.indexOf(termLower);
+      if (idx !== -1) {
+        // Encuentra los límites de palabras alrededor del término
+        const words = field.split(/\s+/);
+        let wordIdx = 0, charCount = 0;
+        // Encuentra en qué palabra cae el índice
+        for (; wordIdx < words.length; wordIdx++) {
+          if (charCount + words[wordIdx].length >= idx) break;
+          charCount += words[wordIdx].length + 1;
+        }
+        // Toma hasta 2 palabras antes y después
+        const start = Math.max(0, wordIdx - 2);
+        const end = Math.min(words.length, wordIdx + 3);
+        const snippetWords = words.slice(start, end);
+        // Resalta el término (case-insensitive)
+        const snippet = snippetWords
+          .map(w => w.toLowerCase().includes(termLower) ? `<mark>${w}</mark>` : w)
+          .join(' ');
+        return '...' + snippet + '...';
+      }
+    }
+    return null;
+  }
 
   ngOnInit(): void {
     this.loadPlatforms();
