@@ -122,6 +122,12 @@
         </p>
 
         <a [href]="property.url" target="_blank" rel="noopener noreferrer">Ver anuncio</a>
+
+        @if (searchFilters?.district) {
+          @if (getDistrictSnippet(property)) {
+            <div class="district-snippet" [innerHTML]="getDistrictSnippet(property)"></div>
+          }
+        }
       </article>
     }
   </section>
