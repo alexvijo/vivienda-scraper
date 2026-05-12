@@ -119,7 +119,8 @@ class PisosScraper(BaseScraper):
                     searchable_text = " ".join([
                         prop.title or "",
                         prop.address or "",
-                        prop.description or ""
+                        prop.description or "",
+                        prop.url or ""
                     ]).lower()
                     if search_term not in searchable_text:
                         continue

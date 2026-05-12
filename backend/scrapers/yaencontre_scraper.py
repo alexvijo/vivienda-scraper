@@ -118,18 +118,19 @@ class YaencontreScraper(BaseScraper):
                             published_at=None,
                             scraped_at=self.now_iso(),
                         )
-                        
+
                         # Filter by district if provided (search in title, address, description)
                         if filters.district:
                             search_term = filters.district.lower()
                             searchable_text = " ".join([
                                 prop_obj.title or "",
                                 prop_obj.address or "",
-                                prop_obj.description or ""
+                                prop_obj.description or "",
+                                prop_obj.url or ""
                             ]).lower()
                             if search_term not in searchable_text:
                                 continue
-                        
+
                         properties.append(prop_obj)
                         )
                     except Exception as e:
