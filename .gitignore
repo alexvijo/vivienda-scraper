@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+ENV/
+env/
+.venv
+
+# FastAPI/Uvicorn
+*.db
+*.sqlite
+*.sqlite3
+cache.db
+
+# Node / NPM / Angular
+node_modules/
+npm-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.angular/
+.ng/
+.next/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+out/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local

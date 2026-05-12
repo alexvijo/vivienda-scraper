@@ -1,0 +1,118 @@
+<div class="shell">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Vivienda Scraper</p>
+      <h1>Buscador de vivienda con mapa en tiempo real</h1>
+      <p class="subtitle">
+        Explora resultados de varios portales y ubicalos en un mapa OpenStreetMap sin necesidad de API key.
+      </p>
+    </div>
+  </header>
+
+  <section class="search-panel">
+    <form [formGroup]="searchForm" (ngSubmit)="submitSearch()" class="search-grid">
+      <label>
+        Ciudad
+        <input type="text" formControlName="city" placeholder="madrid" />
+      </label>
+
+      <label>
+        Precio minimo
+        <input type="number" formControlName="price_min" placeholder="150000" />
+      </label>
+
+      <label>
+        Precio maximo
+        <input type="number" formControlName="price_max" placeholder="400000" />
+      </label>
+
+      <label>
+        Habitaciones minimas
+        <input type="number" formControlName="rooms_min" placeholder="2" />
+      </label>
+
+      <label>
+        Superficie minima (m2)
+        <input type="number" formControlName="size_min" placeholder="65" />
+      </label>
+
+      <label>
+        Superficie maxima (m2)
+        <input type="number" formControlName="size_max" placeholder="180" />
+      </label>
+
+      <div class="platforms">
+        <p>Plataformas</p>
+        <div class="chips">
+          @for (platform of platforms; track platform.key) {
+            <label class="chip" [class.disabled]="!platform.available">
+              <input
+                type="checkbox"
+                [checked]="selectedPlatforms.has(platform.key)"
+                [disabled]="!platform.available"
+                (change)="togglePlatform(platform.key, $any($event.target).checked)"
+              />
+              <span>{{ platform.name }}</span>
+            </label>
+          }
+        </div>
+      </div>
+
+      <button type="submit" [disabled]="loading">
+        {{ loading ? 'Buscando...' : 'Buscar viviendas' }}
+      </button>
+    </form>
+
+    @if (errorMessage) {
+      <p class="error">{{ errorMessage }}</p>
+    }
+  </section>
+
+  <section class="results-meta">
+    <p>
+      <strong>{{ properties.length }}</strong>
+      resultados
+      @if (platformsQueried.length > 0) {
+        <span>en {{ platformsQueried.join(', ') }}</span>
+      }
+    </p>
+  </section>
+
+  <section class="map-wrapper">
+    <div #mapContainer class="map-canvas" aria-label="Mapa de propiedades"></div>
+  </section>
+
+  <section class="results-grid">
+    @if (!loading && initialized && properties.length === 0) {
+      <article class="empty-state">
+        <h2>No hay resultados para estos filtros</h2>
+        <p>Prueba ampliando rangos de precio o superficie para obtener mas viviendas.</p>
+      </article>
+    }
+
+    @for (property of properties; track trackByPropertyId($index, property)) {
+      <article class="property-card" [class]="'platform-' + property.platform">
+        @if (property.images && property.images.length > 0) {
+          <div class="card-image">
+            <img [src]="property.images[0]" [alt]="property.title" />
+            <span class="platform-badge platform-badge-overlay">{{ property.platform }}</span>
+          </div>
+        } @else {
+          <div class="platform-badge platform-badge-block">{{ property.platform }}</div>
+        }
+        <h3>{{ property.title }}</h3>
+        <p class="price">{{ asCurrency(property.price) }}</p>
+
+        <div class="facts">
+          <span>{{ property.rooms ?? '-' }} hab.</span>
+          <span>{{ property.bathrooms ?? '-' }} banos</span>
+          <span>{{ property.size_m2 ?? '-' }} m2</span>
+        </div>
+
+        <p class="address">{{ property.address || property.district || property.city || 'Sin direccion' }}</p>
+
+        <a [href]="property.url" target="_blank" rel="noopener noreferrer">Ver anuncio</a>
+      </article>
+    }
+  </section>
+</div>
