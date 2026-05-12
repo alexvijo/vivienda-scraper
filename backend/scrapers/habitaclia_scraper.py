@@ -113,33 +113,45 @@ class HabitacliaScraper(BaseScraper):
                         if filters.size_max and size_m2 and size_m2 > filters.size_max:
                             continue
 
-                        properties.append(
-                            Property(
-                                id=url,
-                                title=title,
-                                price=price,
-                                price_per_m2=price / size_m2 if price and size_m2 else None,
-                                size_m2=size_m2,
-                                rooms=rooms,
-                                bathrooms=None,
-                                floor=None,
-                                address=address_text,
-                                district=None,
-                                city=filters.city,
-                                lat=None,
-                                lon=None,
-                                url=url,
-                                platform=self.platform,
-                                images=images,
-                                description=None,
-                                has_elevator=None,
-                                has_parking=None,
-                                has_terrace=None,
-                                is_new_development=None,
-                                published_at=None,
-                                scraped_at=self.now_iso(),
-                            )
+                        # Create property object first
+                        prop_obj = Property(
+                            id=url,
+                            title=title,
+                            price=price,
+                            price_per_m2=price / size_m2 if price and size_m2 else None,
+                            size_m2=size_m2,
+                            rooms=rooms,
+                            bathrooms=None,
+                            floor=None,
+                            address=address_text,
+                            district=None,
+                            city=filters.city,
+                            lat=None,
+                            lon=None,
+                            url=url,
+                            platform=self.platform,
+                            images=images,
+                            description=None,
+                            has_elevator=None,
+                            has_parking=None,
+                            has_terrace=None,
+                            is_new_development=None,
+                            published_at=None,
+                            scraped_at=self.now_iso(),
                         )
+                        
+                        # Filter by district if provided (search in title, address, description)
+                        if filters.district:
+                            search_term = filters.district.lower()
+                            searchable_text = " ".join([
+                                prop_obj.title or "",
+                                prop_obj.address or "",
+                                prop_obj.description or ""
+                            ]).lower()
+                            if search_term not in searchable_text:
+                                continue
+                        
+                        properties.append(prop_obj)
                     except Exception as e:
                         self.logger.debug(f"Error parsing property: {e}")
                         continue

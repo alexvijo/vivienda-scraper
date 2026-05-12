@@ -113,6 +113,16 @@ class PisosScraper(BaseScraper):
                     continue
                 if filters.size_max is not None and prop.size_m2 is not None and prop.size_m2 > filters.size_max:
                     continue
+                # Filter by district if provided (search in title, address, description)
+                if filters.district:
+                    search_term = filters.district.lower()
+                    searchable_text = " ".join([
+                        prop.title or "",
+                        prop.address or "",
+                        prop.description or ""
+                    ]).lower()
+                    if search_term not in searchable_text:
+                        continue
                 properties.append(prop)
             except Exception as exc:
                 logger.debug("Pisos.com parse error: %s", exc)
