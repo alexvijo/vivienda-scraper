@@ -253,45 +253,53 @@ export class AppComponent implements OnInit {
 
   /** Queries Nominatim for the city bounding box. Returns null on failure. */
   private async geocodeCity(
-    city: string,
-  ): Promise<[number, number, number, number] | null> {
-    try {
-      const url =
-        `https://nominatim.openstreetmap.org/search` +
-        `?q=${encodeURIComponent(city + ', España')}` +
-        `&format=json&limit=1&addressdetails=0`;
 
-      const results = await firstValueFrom(
-        this.http.get<{ boundingbox: string[] }[]>(url, {
-          headers: { 'Accept-Language': 'es' },
-        }),
-      );
+  // ...existing code...
 
-      if (!results?.length) return null;
+  export class AppComponent implements OnInit {
+    // ...existing code...
 
-      // boundingbox: [south, north, west, east]
-      const [s, n, w, e] = results[0].boundingbox.map(Number);
-      return [s, n, w, e];
-    } catch {
+    /**
+     * Devuelve un fragmento de hasta 5 palabras donde aparece el término de barrio/zona,
+     * buscando en título, dirección, descripción y url. Resalta el término encontrado.
+     */
+    getDistrictSnippet(property: Property): string | null {
+      const term = this.searchFilters?.district?.trim();
+      if (!term) return null;
+      const termLower = term.toLowerCase();
+      const fields = [
+        property.title || '',
+        property.address || '',
+        property.description || '',
+        property.url || '',
+      ];
+      for (const field of fields) {
+        const fieldLower = field.toLowerCase();
+        const idx = fieldLower.indexOf(termLower);
+        if (idx !== -1) {
+          // Encuentra los límites de palabras alrededor del término
+          const words = field.split(/\s+/);
+          let wordIdx = 0, charCount = 0;
+          // Encuentra en qué palabra cae el índice
+          for (; wordIdx < words.length; wordIdx++) {
+            if (charCount + words[wordIdx].length >= idx) break;
+            charCount += words[wordIdx].length + 1;
+          }
+          // Toma hasta 2 palabras antes y después
+          const start = Math.max(0, wordIdx - 2);
+          const end = Math.min(words.length, wordIdx + 3);
+          const snippetWords = words.slice(start, end);
+          // Resalta el término (case-insensitive)
+          const snippet = snippetWords
+            .map(w => w.toLowerCase().includes(termLower) ? `<mark>${w}</mark>` : w)
+            .join(' ');
+          return '...' + snippet + '...';
+        }
+      }
       return null;
     }
-  }
 
-  private async renderMarkers(
-    cityBbox: [number, number, number, number] | null,
-  ): Promise<void> {
-    await this.ensureMap();
-    if (!this.map || !this.leaflet) {
-      return;
-    }
-
-    for (const marker of this.markers) {
-      marker.removeFrom(this.map);
-    }
-    this.markers = [];
-
-    const locatedProperties = this.properties.filter(
-      (p) => p.lat !== null && p.lon !== null,
+  // ...existing code...
     );
 
     // If we have coordinates, fit to markers; otherwise fit to city bbox
