@@ -38,7 +38,7 @@ class SearchService:
         self._cache = CacheService()
 
     def search(self, filters: SearchFilters) -> tuple[list[Property], list[str]]:
-        """Run search across requested platforms, using cache when available.
+        """Run search across requested platforms, using per-platform cache.
 
         Returns:
             Tuple of (properties list, list of platforms actually queried)
@@ -48,28 +48,33 @@ class SearchService:
             logger.warning("No available scrapers for platforms: %s", filters.platforms)
             return [], []
 
-        cache_key = CacheService.make_key(
-            {**filters.model_dump(), "platforms": sorted(requested)}
-        )
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            logger.info("Cache hit for key %s", cache_key[:8])
-            return cached, requested
+        # Filters without the platform list — shared across platforms for the same query
+        base_params = {k: v for k, v in filters.model_dump().items() if k != "platforms"}
 
         properties: list[Property] = []
         queried: list[str] = []
 
         for platform in requested:
+            platform_key = CacheService.make_key({**base_params, "platform": platform})
+            cached = self._cache.get(platform_key)
+            if cached is not None:
+                logger.info("Cache hit for %s key %s", platform, platform_key[:8])
+                properties.extend(cached)
+                queried.append(platform)
+                continue
+
             scraper_cls = AVAILABLE_SCRAPERS[platform]
             scraper = scraper_cls()
             if not scraper.is_available():
-                logger.warning("Scraper %s is not available (missing credentials?)", platform)
+                logger.warning("Scraper %s is not available", platform)
                 continue
             try:
                 results = scraper.search(filters)
                 properties.extend(results)
                 queried.append(platform)
                 logger.info("Scraped %d properties from %s", len(results), platform)
+                # Cache even empty results to avoid re-scraping a platform that returned 0
+                self._cache.set(platform_key, results)
             except Exception as exc:
                 logger.error("Scraper %s failed: %s", platform, exc)
 
@@ -85,9 +90,6 @@ class SearchService:
 
         # Sort by price ascending (nulls last)
         properties.sort(key=lambda p: p.price if p.price is not None else float("inf"))
-
-        if properties:
-            self._cache.set(cache_key, properties)
 
         return properties, queried
 
