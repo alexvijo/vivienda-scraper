@@ -54,7 +54,10 @@ def _chrome_major_version() -> int | None:
     return None
 
 
-# Idealista URL slug per city
+# Idealista URL slug per city.
+# Pattern for most cities: {city}-{province} (e.g. cuenca-cuenca, cadiz-cadiz).
+# Exceptions: provincial capitals that share name with the province use just the city name,
+# or have a special suffix like -municipio or -gasteiz.
 CITY_SLUGS: dict[str, str] = {
     "madrid": "madrid",
     "barcelona": "barcelona",
@@ -63,21 +66,62 @@ CITY_SLUGS: dict[str, str] = {
     "bilbao": "bilbao",
     "zaragoza": "zaragoza",
     "malaga": "malaga",
+    "málaga": "malaga",
     "alicante": "alicante",
     "murcia": "murcia",
     "almeria": "almeria-almeria",
     "almería": "almeria-almeria",
     "granada": "granada",
     "cordoba": "cordoba",
+    "córdoba": "cordoba",
     "cadiz": "cadiz-cadiz",
     "cádiz": "cadiz-cadiz",
-    "valladolid": "valladolid",
+    "cuenca": "cuenca-cuenca",
+    "toledo": "toledo-toledo",
+    "guadalajara": "guadalajara-guadalajara",
+    "albacete": "albacete-albacete",
+    "ciudad real": "ciudad-real-ciudad-real",
+    "huelva": "huelva-huelva",
+    "jaen": "jaen-jaen",
+    "jaén": "jaen-jaen",
+    "burgos": "burgos-burgos",
+    "leon": "leon-leon",
+    "león": "leon-leon",
+    "palencia": "palencia-palencia",
+    "segovia": "segovia-segovia",
+    "soria": "soria-soria",
+    "zamora": "zamora-zamora",
+    "avila": "avila-avila",
+    "ávila": "avila-avila",
+    "caceres": "caceres-caceres",
+    "cáceres": "caceres-caceres",
+    "badajoz": "badajoz-badajoz",
+    "lugo": "lugo-lugo",
+    "ourense": "ourense-ourense",
+    "pontevedra": "pontevedra-pontevedra",
     "vigo": "vigo",
     "gijon": "gijon",
+    "gijón": "gijon",
     "vitoria": "vitoria-gasteiz",
     "santander": "santander",
     "pamplona": "pamplona",
     "salamanca": "salamanca",
+    "valladolid": "valladolid",
+    "tarragona": "tarragona-tarragona",
+    "lleida": "lleida-lleida",
+    "girona": "girona-girona",
+    "castellon": "castellon-de-la-plana-castellon",
+    "castellón": "castellon-de-la-plana-castellon",
+    "alicante": "alicante-alicante",
+    "murcia": "murcia-murcia",
+    "cartagena": "cartagena-murcia",
+    "tenerife": "tenerife",
+    "las palmas": "las-palmas-de-gran-canaria-palmas-las",
+    "palma": "palma-de-mallorca-illes-balears",
+    "logrono": "logrono-rioja-la",
+    "logroño": "logrono-rioja-la",
+    "huesca": "huesca-huesca",
+    "teruel": "teruel-teruel",
 }
 
 DISTRICT_SLUGS: dict[str, str] = {
@@ -116,7 +160,9 @@ class IdealistaScraper(BaseScraper):
             logger.error("undetected-chromedriver not installed. Run: pip install undetected-chromedriver setuptools")
             return []
 
-        city_slug = CITY_SLUGS.get(_normalize(filters.city), f"{_normalize(filters.city)}-{_normalize(filters.city)}")
+        city_norm = _normalize(filters.city)
+        # Fallback: most Spanish cities follow the {city}-{city} pattern on Idealista
+        city_slug = CITY_SLUGS.get(city_norm, f"{city_norm}-{city_norm}")
         district_slug = DISTRICT_SLUGS.get(_normalize(filters.district or "").strip())
         search_slug = district_slug if district_slug else city_slug
 
