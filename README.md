@@ -243,6 +243,22 @@ curl "http://localhost:8000/api/search?city=almeria&price_max=200000&platforms=p
 }
 ```
 
+### ⚠️ Limitaciones Conocidas
+
+#### Filtrado por Barrio/Zona (Parámetro `district`)
+
+El campo `district` está disponible en la UI frontend y en el API, **pero los portales inmobiliarios NO soportan búsqueda específica por barrio/zona** en sus URLs:
+
+- **Pisos.com**: No interpreta barrios en la URL
+- **Fotocasa.es**: El parámetro "zone" no filtra correctamente
+- **Habitaclia.com**: No soporta barrios en la búsqueda por URL
+- **YaEncontre.com**: No soporta búsqueda por barrio
+- **Trovimap.com**: No soporta búsqueda por barrio
+
+**Consecuencia**: El parámetro `district` se acepta pero se ignora — obtendrás todos los resultados de la ciudad, no filtrados por barrio.
+
+**Solución futura**: Extraer datos de geolocalización de las propiedades y hacer filtrado post-scraping (requeriría APIs de geocodificación más robustos).
+
 ---
 
 ## 🛠️ Desarrollo

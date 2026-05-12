@@ -81,9 +81,9 @@ class FotocasaScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     def _build_url(self, city_slug: str, filters: SearchFilters, page: int) -> str:
-        # Use district if provided, otherwise use "todas-las-zonas"
-        zone = filters.district.lower().replace(" ", "-") if filters.district else "todas-las-zonas"
-        base = f"{BASE_URL}/es/comprar/viviendas/{city_slug}/{zone}/l"
+        # Note: fotocasa does not properly support district filtering
+        # Using "todas-las-zonas" to fetch all zones, filtering is unreliable
+        base = f"{BASE_URL}/es/comprar/viviendas/{city_slug}/todas-las-zonas/l"
         params: list[str] = []
         if filters.price_max is not None:
             params.append(f"maxPrice={int(filters.price_max)}")

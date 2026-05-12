@@ -47,15 +47,14 @@ class HabitacliaScraper(BaseScraper):
     def search(self, filters: SearchFilters) -> list[Property]:
         city = filters.city.lower()
         slug = self.city_slugs.get(city, city)
-        district_slug = filters.district.lower().replace(" ", "-") if filters.district else None
+        # Note: habitaclia does not support district filtering via URL
 
         properties = []
         pages = 0
 
         while pages < 3:
-            # Build URL with district if provided
-            location = f"{district_slug}-{slug}" if district_slug else slug
-            url = f"{self.base_url}/comprar-piso-en-{location}.htm"
+            # Build URL without district (not supported by portal)
+            url = f"{self.base_url}/comprar-piso-en-{slug}.htm"
             if pages > 0:
                 url += f"?pagina={pages + 1}"
 
