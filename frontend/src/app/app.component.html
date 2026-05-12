@@ -112,6 +112,13 @@
 
         <p class="address">{{ property.address || property.district || property.city || 'Sin direccion' }}</p>
 
+        <p class="location">
+          {{ property.city }}
+          @if (property.district) {
+            <span class="district">{{ property.district }}</span>
+          }
+        </p>
+
         <a [href]="property.url" target="_blank" rel="noopener noreferrer">Ver anuncio</a>
       </article>
     }

@@ -270,6 +270,19 @@ button:disabled {
 	font-size: 0.87rem;
 }
 
+.location {
+	margin: 0.5rem 0;
+	color: var(--muted);
+	font-size: 0.82rem;
+	text-transform: capitalize;
+}
+
+.location .district {
+	margin-left: 0.3rem;
+	padding-left: 0.3rem;
+	border-left: 1px solid var(--line);
+}
+
 a {
 	color: var(--brand-dark);
 	font-weight: 700;
