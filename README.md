@@ -48,7 +48,7 @@ Un buscador de viviendas en tiempo real que agrega resultados de múltiples port
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/yourusername/vivienda-scraper.git
+git clone https://github.com/alexvijo/vivienda-scraper.git
 cd vivienda-scraper
 ```
 
