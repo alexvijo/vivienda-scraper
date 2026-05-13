@@ -296,7 +296,7 @@ class IdealistaScraper(BaseScraper):
             path = f"/venta-viviendas/{slug}/con-precio-hasta_{int(filters.price_max)}/"
         if page > 1:
             path = path.rstrip("/") + f"/pagina-{page}.htm"
-        return BASE_URL + path
+        return BASE_URL + path + "?ordenado-por=fecha-publicacion-desc"
 
     def _parse(self, html: str, city: str) -> list[Property]:
         soup = BeautifulSoup(html, "lxml")
