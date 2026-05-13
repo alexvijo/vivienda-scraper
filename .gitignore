@@ -67,3 +67,6 @@ build/
 .env
 .env.local
 .env.*.local
+
+# Saved browser session cookies (contains auth tokens — never commit)
+idealista_cookies.json

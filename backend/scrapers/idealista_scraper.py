@@ -17,11 +17,10 @@ To enable the official API:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
-import shutil
-import tempfile
 import time
 import unicodedata
 import subprocess
@@ -137,48 +136,18 @@ DISTRICT_SLUGS: dict[str, str] = {
 
 BASE_URL = "https://www.idealista.com"
 
-_CHROME_USER_DATA_CANDIDATES = [
-    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data"),
-    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome Beta\User Data"),
-    os.path.expandvars(r"%LOCALAPPDATA%\Chromium\User Data"),
-]
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), "..", "idealista_cookies.json")
 
 
-def _find_chrome_user_data() -> str | None:
-    for path in _CHROME_USER_DATA_CANDIDATES:
-        if os.path.isdir(path):
-            return path
-    return None
-
-
-def _is_chrome_running() -> bool:
-    try:
-        out = subprocess.check_output(
-            ["powershell", "-command",
-             "Get-Process -Name chrome -ErrorAction SilentlyContinue | Select-Object -First 1 Id"],
-            timeout=5,
-        ).decode().strip()
-        return bool(out)
-    except Exception:
-        return False
-
-
-def _copy_profile(user_data_dir: str, profile: str = "Default") -> str | None:
-    """Copy a Chrome profile to a temp dir so UC can open it without locking the original."""
-    src = os.path.join(user_data_dir, profile)
-    if not os.path.isdir(src):
+def _load_saved_cookies() -> list[dict] | None:
+    path = os.path.normpath(COOKIES_FILE)
+    if not os.path.exists(path):
         return None
-    tmp = tempfile.mkdtemp(prefix="idealista_chrome_")
-    dst = os.path.join(tmp, profile)
     try:
-        shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
-            "lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket",
-            "*.log", "Cache", "Code Cache", "GPUCache",
-        ))
-        return tmp
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
     except Exception as exc:
-        logger.warning("Could not copy Chrome profile: %s", exc)
-        shutil.rmtree(tmp, ignore_errors=True)
+        logger.warning("Could not read idealista_cookies.json: %s", exc)
         return None
 
 
@@ -220,28 +189,9 @@ class IdealistaScraper(BaseScraper):
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
 
-        tmp_profile_dir: str | None = None
-        use_profile = self._settings.IDEALISTA_USE_PROFILE
-
-        if use_profile:
-            if _is_chrome_running():
-                logger.warning(
-                    "IDEALISTA_USE_PROFILE is enabled but Chrome is currently open. "
-                    "Close Chrome completely and retry to use your session."
-                )
-                use_profile = False
-            else:
-                user_data = _find_chrome_user_data()
-                if user_data:
-                    tmp_profile_dir = _copy_profile(user_data)
-                    if tmp_profile_dir:
-                        options.add_argument(f"--user-data-dir={tmp_profile_dir}")
-                        options.add_argument("--profile-directory=Default")
-                        logger.info("Idealista: using Chrome profile from %s", user_data)
-                    else:
-                        logger.warning("Idealista: could not copy Chrome profile, continuing without it")
-                else:
-                    logger.warning("Idealista: Chrome user data directory not found, continuing without profile")
+        saved_cookies = _load_saved_cookies() if self._settings.IDEALISTA_USE_PROFILE else None
+        if saved_cookies:
+            logger.info("Idealista: found %d saved cookies, will inject session", len(saved_cookies))
 
         properties: list[Property] = []
         driver = None
@@ -251,12 +201,24 @@ class IdealistaScraper(BaseScraper):
                 kwargs["version_main"] = chrome_version
             driver = uc.Chrome(**kwargs)
 
-            # Warm up on home page so Idealista session cookies are set.
-            # Skip if using profile — already logged in.
-            if not use_profile or not tmp_profile_dir:
+            # Navigate to home first so the domain is set, then inject cookies.
+            driver.get(BASE_URL)
+            time.sleep(3)
+            self._dismiss_cookies(driver)
+
+            if saved_cookies:
+                for cookie in saved_cookies:
+                    # UC requires cookies without 'expiry' key type mismatches
+                    cookie.pop("sameSite", None)
+                    try:
+                        driver.add_cookie(cookie)
+                    except Exception:
+                        pass
+                # Reload to activate the injected session
                 driver.get(BASE_URL)
-                time.sleep(4)
+                time.sleep(3)
                 self._dismiss_cookies(driver)
+                logger.info("Idealista: session cookies injected")
 
             for page in range(1, self._settings.MAX_PAGES + 1):
                 url = self._build_url(search_slug, filters, page)
@@ -286,8 +248,6 @@ class IdealistaScraper(BaseScraper):
                     driver.quit()
                 except Exception:
                     pass
-            if tmp_profile_dir:
-                shutil.rmtree(tmp_profile_dir, ignore_errors=True)
 
         # Post-filter: price_min, rooms_min, size_min (not supported in Idealista URL)
         if filters.price_min is not None:
