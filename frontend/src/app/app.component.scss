@@ -39,18 +39,33 @@
 	color: var(--ink);
 }
 
-.hero h1 {
-	margin: 0.25rem 0 0;
-	max-width: 22ch;
-	font: 700 clamp(1.7rem, 4vw, 2.8rem) / 1.05 'Space Grotesk', sans-serif;
+.logo {
+	display: flex;
+	align-items: center;
+	gap: 0.85rem;
 }
 
-.eyebrow {
-	margin: 0;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--brand-dark);
-	font: 600 0.78rem/1.2 'Space Grotesk', sans-serif;
+.logo-badge {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	filter: drop-shadow(0 3px 8px rgba(140, 62, 21, 0.30));
+}
+
+.logo-text {
+	line-height: 1;
+	font-family: 'Space Grotesk', sans-serif;
+	font-weight: 700;
+	font-size: clamp(1.4rem, 3vw, 2rem);
+	letter-spacing: -0.03em;
+}
+
+.logo-main {
+	color: var(--ink);
+}
+
+.logo-accent {
+	color: var(--brand);
 }
 
 .subtitle {
