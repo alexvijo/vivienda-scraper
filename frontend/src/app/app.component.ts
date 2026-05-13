@@ -129,7 +129,6 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPlatforms();
-    this.submitSearch();
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -237,6 +236,8 @@ export class AppComponent implements OnInit {
             this.selectedPlatforms = new Set<string>(availableDefaults);
           }
         }
+
+        this.submitSearch();
       },
       error: () => {
         this.platforms = [
@@ -245,6 +246,8 @@ export class AppComponent implements OnInit {
           { key: 'fotocasa', name: 'Fotocasa', available: true },
           { key: 'pisos', name: 'Pisos.com', available: true },
         ];
+
+        this.submitSearch();
       },
     });
   }
