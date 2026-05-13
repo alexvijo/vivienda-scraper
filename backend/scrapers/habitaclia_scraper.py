@@ -1,6 +1,4 @@
-# Habitaclia scraper - currently blocked by Cloudflare ("Pardon Our Interruption")
-# is_available() returns False so it is skipped without errors.
-# Re-enable when a bypass is available.
+# Habitaclia scraper
 
 import re
 import time
@@ -22,7 +20,7 @@ class HabitacliaScraper(BaseScraper):
     base_url = "https://www.habitaclia.com"
 
     def is_available(self) -> bool:
-        return False
+        return True
 
     city_slugs = {
         "madrid": "madrid",
