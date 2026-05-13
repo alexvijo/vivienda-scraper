@@ -196,6 +196,12 @@ button[type='submit']:disabled {
 	height: min(75vh, 600px);
 }
 
+.map-canvas:fullscreen,
+.map-canvas:-webkit-full-screen {
+	width: 100vw;
+	height: 100vh;
+}
+
 .results-grid {
 	margin-top: 1rem;
 	display: grid;

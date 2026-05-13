@@ -297,6 +297,37 @@ export class AppComponent implements OnInit {
       {},
       { position: 'topright' },
     ).addTo(this.map);
+
+    const FullscreenControl = leaflet.Control.extend({
+      onAdd(map: LeafletMap) {
+        const btn = leaflet.DomUtil.create('button', 'leaflet-fullscreen-btn leaflet-bar');
+        btn.title = 'Pantalla completa';
+        btn.innerHTML = '&#x26F6;';
+        leaflet.DomEvent.disableClickPropagation(btn);
+        leaflet.DomEvent.on(btn, 'click', () => {
+          const el = map.getContainer();
+          if (!document.fullscreenElement) {
+            el.requestFullscreen();
+            btn.innerHTML = '&#x2715;';
+            btn.title = 'Salir de pantalla completa';
+          } else {
+            document.exitFullscreen();
+            btn.innerHTML = '&#x26F6;';
+            btn.title = 'Pantalla completa';
+          }
+        });
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement) {
+            btn.innerHTML = '&#x26F6;';
+            btn.title = 'Pantalla completa';
+          }
+          setTimeout(() => map.invalidateSize(), 100);
+        });
+        return btn;
+      },
+      onRemove() {},
+    });
+    new FullscreenControl({ position: 'topleft' }).addTo(this.map);
   }
 
   /** Queries Nominatim for the city bounding box. Returns null on failure. */

@@ -136,9 +136,13 @@ class YaencontreScraper(BaseScraper):
     def _parse_item(self, item_data: dict, city: str) -> Property | None:
         item = item_data.get("item", item_data)
 
+        item_url = item.get("url")
         ref = item.get("reference") or item.get("id", "")
-        prop_url = f"{BASE_URL}/inmueble/{ref}" if ref else None
-        if not prop_url:
+        if item_url:
+            prop_url = BASE_URL + item_url if item_url.startswith("/") else item_url
+        elif ref:
+            prop_url = f"{BASE_URL}/inmueble/{ref}"
+        else:
             return None
 
         prop_id = hashlib.md5(prop_url.encode()).hexdigest()[:12]
