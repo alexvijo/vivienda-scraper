@@ -35,7 +35,7 @@ export class AppComponent implements OnInit {
   private mapContainer?: ElementRef<HTMLDivElement>;
 
   readonly searchForm = this.fb.group({
-    city: ['madrid', [Validators.required, Validators.minLength(2)]],
+    city: ['Almería', [Validators.required, Validators.minLength(2)]],
     keyword: [null as string | null],
     price_min: [75000 as number | null],
     price_max: [200000 as number | null],
