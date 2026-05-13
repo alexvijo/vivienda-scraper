@@ -125,9 +125,9 @@ CITY_SLUGS: dict[str, str] = {
 }
 
 DISTRICT_SLUGS: dict[str, str] = {
-    "retamar": "almeria/retamar-aguadulce",
+    "retamar": "almeria/retamar",
     "toyo": "almeria/el-toyo-cabo-de-gata",
-    "aguadulce": "almeria/retamar-aguadulce",
+    "aguadulce": "almeria/aguadulce",
     "cabo de gata": "almeria/el-toyo-cabo-de-gata",
     "el toyo": "almeria/el-toyo-cabo-de-gata",
 }
