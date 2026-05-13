@@ -1,8 +1,12 @@
-# 🏠 Vivienda Scraper
+<p align="center">
+  <img src="./images/logo.svg" alt="viviendascraper" height="52" />
+</p>
 
-Un buscador de viviendas en tiempo real que agrega resultados de múltiples portales inmobiliarios españoles con mapa interactivo integrado.
+<p align="center">Un buscador de viviendas en tiempo real que agrega resultados de múltiples portales inmobiliarios españoles con mapa interactivo integrado.</p>
 
-![Vivienda Scraper Banner](./images/header.jpg)
+<p align="center">
+  <img src="./images/header.jpg" alt="Vivienda Scraper Banner" height="336" />
+</p>
 
 ![Vivienda Scraper](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python)
 ![Angular](https://img.shields.io/badge/Angular-17-red?style=flat-square&logo=angular)
@@ -13,7 +17,7 @@ Un buscador de viviendas en tiempo real que agrega resultados de múltiples port
 ## ✨ Características
 
 - 🔍 **Búsqueda multi-plataforma**: Scraping automático de 6 portales inmobiliarios
-  - [Idealista](https://www.idealista.com) (bloqueado actualmente, requiere API)
+  - [Idealista](https://www.idealista.com) ✅ (via undetected-chromedriver + sesión de usuario)
   - [Fotocasa](https://www.fotocasa.es) ✅
   - [Pisos.com](https://www.pisos.com) ✅
   - [Habitaclia](https://www.habitaclia.com) ✅
@@ -329,7 +333,7 @@ DEBUG:    Found 5 properties from pisos
 | **Habitaclia** | ✅ Funcional | Cobertura media |
 | **YaEncontre** | ✅ Funcional | Cobertura media |
 | **Trovimap** | ✅ Funcional | Cobertura media |
-| **Idealista** | ❌ Bloqueado | DataDome captcha — requiere API key oficial |
+| **Idealista** | ✅ Funcional | Via undetected-chromedriver + sesión guardada (`save_idealista_cookies.py`) |
 
 **Coordinadas GPS:** La mayoría de scrapers no extraen `lat/lon`. El mapa usa Nominatim para centrar en la ciudad buscada.
 
