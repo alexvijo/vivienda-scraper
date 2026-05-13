@@ -353,15 +353,15 @@ Distribuido bajo licencia MIT. Ver `LICENSE` para más detalles.
 
 ## 👤 Autor
 
-**Tu nombre** — [GitHub](https://github.com/yourusername) | [LinkedIn](https://linkedin.com/in/yourprofile)
+**Alexvijo** — [GitHub](https://github.com/alexvijo) | [LinkedIn](https://www.linkedin.com/in/alexvicente/)
 
 ---
 
 ## 📞 Soporte
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/vivienda-scraper/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/vivienda-scraper/discussions)
-- 📧 **Email**: tu.email@ejemplo.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/alexvijo/vivienda-scraper/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/alexvijo/vivienda-scraper/discussions)
+- 📧 **Email**: alexvicentejose@gmail.com
 
 ---
 
