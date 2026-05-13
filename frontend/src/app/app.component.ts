@@ -172,7 +172,7 @@ export class AppComponent implements OnInit {
       .subscribe({
         next: async (response) => {
           const results = response.results;
-          this.properties = results;
+          this.properties = results.slice().sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
           this.currentPage = 1;
           this.platformsQueried = response.platforms_queried;
           // If keyword is provided, geocode "keyword, city", otherwise just "city"
