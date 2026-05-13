@@ -91,11 +91,19 @@ class SearchService:
 
     @staticmethod
     def available_platforms() -> list[dict]:
+        name_map = {
+            "idealista": "Idealista",
+            "fotocasa": "Fotocasa",
+            "pisos": "Pisos.com",
+            "habitaclia": "Habitaclia",
+            "yaencontre": "Yaencontre",
+            "trovimap": "Trovimap",
+        }
         return [
             {
                 "key": platform,
-                "name": platform.capitalize(),
-                "available": AVAILABLE_SCRAPERS[platform]().is_available(),
+                "name": name_map.get(platform, platform.capitalize()),
+                "available": True,
             }
             for platform in AVAILABLE_SCRAPERS
         ]

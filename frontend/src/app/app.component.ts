@@ -226,26 +226,23 @@ export class AppComponent implements OnInit {
   private loadPlatforms(): void {
     this.searchApi.getPlatforms().subscribe({
       next: (platforms) => {
-        this.platforms = platforms;
+        // Force all platforms to available so backend is the single source of truth
+        this.platforms = platforms.map(p => ({ ...p, available: true }));
 
-        if (platforms.length > 0) {
-          const availableDefaults = platforms
-            .filter((p) => p.available)
-            .map((p) => p.key);
-          if (availableDefaults.length > 0) {
-            this.selectedPlatforms = new Set<string>(availableDefaults);
-          }
-        }
+        this.selectedPlatforms = new Set<string>(this.platforms.map(p => p.key));
 
         this.submitSearch();
       },
       error: () => {
         this.platforms = [
           { key: 'idealista', name: 'Idealista', available: true },
-          { key: 'habitaclia', name: 'Habitaclia', available: true },
           { key: 'fotocasa', name: 'Fotocasa', available: true },
           { key: 'pisos', name: 'Pisos.com', available: true },
+          { key: 'habitaclia', name: 'Habitaclia', available: true },
+          { key: 'yaencontre', name: 'Yaencontre', available: true },
+          { key: 'trovimap', name: 'Trovimap', available: true },
         ];
+        this.selectedPlatforms = new Set<string>(this.platforms.map(p => p.key));
 
         this.submitSearch();
       },
