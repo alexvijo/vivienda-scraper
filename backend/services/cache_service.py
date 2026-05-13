@@ -59,12 +59,17 @@ class CacheService:
 
         try:
             raw = json.loads(data_json)
+            if not raw:
+                self._delete(key)
+                return None
             return [Property.model_validate(item) for item in raw]
         except Exception as exc:
             logger.warning("Cache deserialization error: %s", exc)
             return None
 
     def set(self, key: str, properties: list[Property]) -> None:
+        if not properties:
+            return
         expires_at = time.time() + self._ttl
         data_json = json.dumps([p.model_dump(mode="json") for p in properties])
         with sqlite3.connect(self._db_path) as conn:
