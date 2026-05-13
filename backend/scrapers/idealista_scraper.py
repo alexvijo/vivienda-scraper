@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
+import shutil
+import tempfile
 import time
 import unicodedata
 import subprocess
@@ -134,6 +137,50 @@ DISTRICT_SLUGS: dict[str, str] = {
 
 BASE_URL = "https://www.idealista.com"
 
+_CHROME_USER_DATA_CANDIDATES = [
+    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data"),
+    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome Beta\User Data"),
+    os.path.expandvars(r"%LOCALAPPDATA%\Chromium\User Data"),
+]
+
+
+def _find_chrome_user_data() -> str | None:
+    for path in _CHROME_USER_DATA_CANDIDATES:
+        if os.path.isdir(path):
+            return path
+    return None
+
+
+def _is_chrome_running() -> bool:
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-command",
+             "Get-Process -Name chrome -ErrorAction SilentlyContinue | Select-Object -First 1 Id"],
+            timeout=5,
+        ).decode().strip()
+        return bool(out)
+    except Exception:
+        return False
+
+
+def _copy_profile(user_data_dir: str, profile: str = "Default") -> str | None:
+    """Copy a Chrome profile to a temp dir so UC can open it without locking the original."""
+    src = os.path.join(user_data_dir, profile)
+    if not os.path.isdir(src):
+        return None
+    tmp = tempfile.mkdtemp(prefix="idealista_chrome_")
+    dst = os.path.join(tmp, profile)
+    try:
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
+            "lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket",
+            "*.log", "Cache", "Code Cache", "GPUCache",
+        ))
+        return tmp
+    except Exception as exc:
+        logger.warning("Could not copy Chrome profile: %s", exc)
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+
 
 class IdealistaScraper(BaseScraper):
     platform = "idealista"
@@ -173,18 +220,43 @@ class IdealistaScraper(BaseScraper):
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
 
+        tmp_profile_dir: str | None = None
+        use_profile = self._settings.IDEALISTA_USE_PROFILE
+
+        if use_profile:
+            if _is_chrome_running():
+                logger.warning(
+                    "IDEALISTA_USE_PROFILE is enabled but Chrome is currently open. "
+                    "Close Chrome completely and retry to use your session."
+                )
+                use_profile = False
+            else:
+                user_data = _find_chrome_user_data()
+                if user_data:
+                    tmp_profile_dir = _copy_profile(user_data)
+                    if tmp_profile_dir:
+                        options.add_argument(f"--user-data-dir={tmp_profile_dir}")
+                        options.add_argument("--profile-directory=Default")
+                        logger.info("Idealista: using Chrome profile from %s", user_data)
+                    else:
+                        logger.warning("Idealista: could not copy Chrome profile, continuing without it")
+                else:
+                    logger.warning("Idealista: Chrome user data directory not found, continuing without profile")
+
         properties: list[Property] = []
         driver = None
         try:
-            kwargs = {"options": options, "headless": False, "use_subprocess": True}
+            kwargs: dict = {"options": options, "headless": False, "use_subprocess": True}
             if chrome_version:
                 kwargs["version_main"] = chrome_version
             driver = uc.Chrome(**kwargs)
 
-            # Warm up on home page so Idealista session cookies are set
-            driver.get(BASE_URL)
-            time.sleep(4)
-            self._dismiss_cookies(driver)
+            # Warm up on home page so Idealista session cookies are set.
+            # Skip if using profile — already logged in.
+            if not use_profile or not tmp_profile_dir:
+                driver.get(BASE_URL)
+                time.sleep(4)
+                self._dismiss_cookies(driver)
 
             for page in range(1, self._settings.MAX_PAGES + 1):
                 url = self._build_url(search_slug, filters, page)
@@ -214,6 +286,8 @@ class IdealistaScraper(BaseScraper):
                     driver.quit()
                 except Exception:
                     pass
+            if tmp_profile_dir:
+                shutil.rmtree(tmp_profile_dir, ignore_errors=True)
 
         # Post-filter: price_min, rooms_min, size_min (not supported in Idealista URL)
         if filters.price_min is not None:

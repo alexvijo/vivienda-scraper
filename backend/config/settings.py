@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     IDEALISTA_API_KEY: str = ""
     IDEALISTA_API_SECRET: str = ""
 
+    # Set to true to use your real Chrome profile when scraping Idealista.
+    # Chrome must be fully closed before running the scraper.
+    IDEALISTA_USE_PROFILE: bool = False
+
     # App
     CACHE_TTL_SECONDS: int = 1800  # 30 minutes
     SQLITE_DB_PATH: str = "cache.db"
