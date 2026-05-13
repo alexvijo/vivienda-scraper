@@ -20,6 +20,10 @@ export class SearchApiService {
     return this.http.get<PlatformAvailability[]>(`${this.apiBaseUrl}/platforms`);
   }
 
+  clearCache(): Observable<void> {
+    return this.http.delete<void>(`${this.apiBaseUrl}/cache`);
+  }
+
   search(filters: SearchFilters): Observable<SearchResponse> {
     let params = new HttpParams().set('city', filters.city.trim());
 

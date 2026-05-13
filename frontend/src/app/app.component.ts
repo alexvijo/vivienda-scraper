@@ -157,7 +157,9 @@ export class AppComponent implements OnInit {
 
     const city = this.searchForm.value.city ?? 'madrid';
     const filters = this.buildFilters();
-    this.searchFilters = filters; // Store filters for display
+    this.searchFilters = filters;
+
+    this.searchApi.clearCache().subscribe({ error: () => {} });
 
     this.searchApi
       .search(filters)

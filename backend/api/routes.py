@@ -57,6 +57,12 @@ def get_platforms() -> list[dict]:
     return _search_service.available_platforms()
 
 
+@router.delete("/cache")
+def clear_cache() -> dict:
+    deleted = _search_service._cache.clear_all()
+    return {"deleted": deleted}
+
+
 @router.get("/debug/fotocasa")
 def debug_fotocasa() -> dict:
     import cloudscraper as cs

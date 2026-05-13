@@ -83,3 +83,9 @@ class CacheService:
         with sqlite3.connect(self._db_path) as conn:
             conn.execute("DELETE FROM search_cache WHERE cache_key = ?", (key,))
             conn.commit()
+
+    def clear_all(self) -> int:
+        with sqlite3.connect(self._db_path) as conn:
+            deleted = conn.execute("DELETE FROM search_cache").rowcount
+            conn.commit()
+        return deleted
