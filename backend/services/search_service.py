@@ -73,8 +73,9 @@ class SearchService:
                 properties.extend(results)
                 queried.append(platform)
                 logger.info("Scraped %d properties from %s", len(results), platform)
-                # Cache even empty results to avoid re-scraping a platform that returned 0
-                self._cache.set(platform_key, results)
+                # Only cache non-empty results — empty may mean a transient UC/browser failure
+                if results:
+                    self._cache.set(platform_key, results)
             except Exception as exc:
                 logger.error("Scraper %s failed: %s", platform, exc)
 
