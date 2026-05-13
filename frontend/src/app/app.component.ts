@@ -169,12 +169,7 @@ export class AppComponent implements OnInit {
       )
       .subscribe({
         next: async (response) => {
-          let results = response.results;
-          // Si hay filtro de barrio, solo mostrar los que contienen el término
-          if (filters.keyword) {
-            this.searchFilters = filters; // asegurar que getKeywordSnippet use el filtro correcto
-            results = results.filter((p) => this.getKeywordSnippet(p));
-          }
+          const results = response.results;
           this.properties = results;
           this.currentPage = 1;
           this.platformsQueried = response.platforms_queried;

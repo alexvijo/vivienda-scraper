@@ -260,7 +260,10 @@ class IdealistaScraper(BaseScraper):
             term = _normalize(filters.district)
             properties = [
                 p for p in properties
-                if term in _normalize(" ".join([p.title or "", p.address or "", p.url or ""]))
+                if term in _normalize(" ".join([
+                    p.title or "", p.address or "",
+                    p.district or "", p.description or "", p.url or "",
+                ]))
             ]
 
         return properties
