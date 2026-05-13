@@ -1,12 +1,8 @@
-<p align="center">
-  <img src="./images/logo.svg" alt="viviendascraper" height="52" />
-</p>
+<img src="./images/logo.svg" alt="viviendascraper" height="56" />
 
-<p align="center">Un buscador de viviendas en tiempo real que agrega resultados de múltiples portales inmobiliarios españoles con mapa interactivo integrado.</p>
+Un buscador de viviendas en tiempo real que agrega resultados de múltiples portales inmobiliarios españoles con mapa interactivo integrado.
 
-<p align="center">
-  <img src="./images/header.jpg" alt="Vivienda Scraper Banner" height="336" />
-</p>
+<img src="./images/header.jpg" alt="Vivienda Scraper Banner" height="336" />
 
 ![Vivienda Scraper](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python)
 ![Angular](https://img.shields.io/badge/Angular-17-red?style=flat-square&logo=angular)
