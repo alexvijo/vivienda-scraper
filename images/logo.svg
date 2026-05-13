@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 56" width="440" height="56">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 56" width="400" height="56">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#d9692f"/>
@@ -8,7 +8,6 @@
   <!-- Badge -->
   <rect x="0" y="6" width="44" height="44" rx="11" fill="url(#g)"/>
   <text x="22" y="35" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="17" letter-spacing="-0.5" fill="white">VS</text>
-  <!-- Wordmark -->
-  <text x="56" y="38" font-family="system-ui,sans-serif" font-weight="700" font-size="28" letter-spacing="-0.8" fill="#1f2a37">vivienda</text>
-  <text x="192" y="38" font-family="system-ui,sans-serif" font-weight="700" font-size="28" letter-spacing="-0.8" fill="#c5612e">scraper</text>
+  <!-- Wordmark: single text with tspan so words touch with no gap -->
+  <text x="56" y="38" font-family="system-ui,sans-serif" font-weight="700" font-size="28" letter-spacing="-0.5" fill="#1f2a37">vivienda<tspan fill="#c5612e">scraper</tspan></text>
 </svg>
