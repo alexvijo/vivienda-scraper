@@ -2,7 +2,7 @@
 
 Un buscador de viviendas en tiempo real que agrega resultados de múltiples portales inmobiliarios españoles con mapa interactivo integrado.
 
-<img src="./images/header.jpg" alt="Vivienda Scraper Banner" height="336" />
+<img src="./images/header.jpg" alt="Vivienda Scraper Banner" width="100%" />
 
 ![Vivienda Scraper](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python)
 ![Angular](https://img.shields.io/badge/Angular-17-red?style=flat-square&logo=angular)
