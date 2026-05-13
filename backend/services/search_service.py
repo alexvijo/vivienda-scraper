@@ -56,12 +56,8 @@ class SearchService:
 
         for platform in requested:
             platform_key = CacheService.make_key({**base_params, "platform": platform})
-            cached = self._cache.get(platform_key)
-            if cached is not None:
-                logger.info("Cache hit for %s key %s", platform, platform_key[:8])
-                properties.extend(cached)
-                queried.append(platform)
-                continue
+            # Always delete stale entry so every button click scrapes fresh results
+            self._cache._delete(platform_key)
 
             scraper_cls = AVAILABLE_SCRAPERS[platform]
             scraper = scraper_cls()
@@ -73,7 +69,6 @@ class SearchService:
                 properties.extend(results)
                 queried.append(platform)
                 logger.info("Scraped %d properties from %s", len(results), platform)
-                # Only cache non-empty results — empty may mean a transient UC/browser failure
                 if results:
                     self._cache.set(platform_key, results)
             except Exception as exc:
